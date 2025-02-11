@@ -19,3 +19,41 @@ fi
 
 ## Define variables
 ASHIFT=$(./helpers/calculate-powers-of-two.bash $ENV_HDD_SECTOR_SIZE)
+
+## Create pool
+zpool create \
+    -o ashift="$ASHIFT" \
+    -O recordsize=256K \
+    \
+    -O sync=enabled \
+    -O logbias=latency \
+    \
+    -O atime=off \
+    \
+    -O xattr=sa \
+    -O zilsaxattr=on \
+    -O acltype=posixacl \
+    -O aclinherit=passthrough \
+    -O aclmode=passthrough \
+    \
+    -O redundant_metadata=most \
+    \
+    -O vdev_zaps_v2=on \
+    \
+    -O checksum=blake3 \
+    \
+    -O encryption=on \
+    -O keyformat=passphrase \
+    -O keylocation=prompt \
+    \
+    -O compression=lz4 \
+    \
+    "$ENV_POOL_NAME" \
+    mirror \
+    "$@"
+
+## Check work
+zpool status
+
+## Done
+exit 0
