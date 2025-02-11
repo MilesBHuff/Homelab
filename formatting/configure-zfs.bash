@@ -24,7 +24,7 @@ chmod 644 "$FILE"
 
 ## Write ZFS configurations to the file.
 echo "options zfs zfs_txg_timeout=$ENV_ACCEPTABLE_DATA_LOSS_SECONDS" >> "$FILE"
-echo "options zfs zfs_txg_size_limit=$(($ENV_SLOWEST_HDD_MAX_SPEED_MBPS * $ENV_ACCEPTABLE_DATA_LOSS_SECONDS))" >> "$FILE"
+echo "options zfs zfs_txg_size_limit=$(($ENV_ACCEPTABLE_DATA_LOSS_SECONDS * ($ENV_SLOWEST_HDD_MAX_SPEED_MBPS * (1024**2))))" >> "$FILE"
 echo "options zfs zfs_immed_write_size=0" >> "$FILE"
 
 ## Notify user and exit.
