@@ -16,3 +16,6 @@ if [[ $# -lt 2 ]]; then
     helptext >&2
     exit 1
 fi
+
+## Define variables
+ASHIFT=$(./helpers/calculate-powers-of-two.bash $ENV_HDD_SECTOR_SIZE)
