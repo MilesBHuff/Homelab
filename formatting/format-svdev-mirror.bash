@@ -18,3 +18,14 @@ fi
 
 ## Define variables
 ENV_FILE='./env.sh'; if [[ -f "$ENV_FILE" ]]; then source ./env.sh; else echo "ERROR: Missing '$ENV_FILE'."; exit -1; fi
+ASHIFT=$(./helpers/calculate-powers-of-two.bash $ENV_HDD_SECTOR_SIZE)
+
+## Format as SVDEV
+set -e
+zpool add \
+    -o ashift="$ASHIFT" \
+    -O vdev_zaps_v2=on \
+    "$ENV_POOL_NAME" \
+    special \
+    mirror "$@"
+exit $?

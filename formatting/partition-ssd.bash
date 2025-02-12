@@ -18,6 +18,7 @@ if [[ $# -lt 1 ]]; then
 fi
 
 ## Partition the disk
+set -e
 for DEVICE in "$@"; do
     if [[ ! -b "$DEVICE" ]]; then
         echo "ERROR: $DEVICE is not a valid block device." >&2

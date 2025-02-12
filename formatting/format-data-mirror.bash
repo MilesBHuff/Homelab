@@ -21,11 +21,13 @@ ENV_FILE='./env.sh'; if [[ -f "$ENV_FILE" ]]; then source ./env.sh; else echo "E
 ASHIFT=$(./helpers/calculate-powers-of-two.bash $ENV_HDD_SECTOR_SIZE)
 
 ## Create pool
+set -e
 zpool create \
     -o ashift="$ASHIFT" \
     -O recordsize=256K \
+    -O special_small_blocks=64K \
     \
-    -O sync=enabled \
+    -O sync=standard \
     -O logbias=latency \
     \
     -O atime=off \
@@ -49,8 +51,5 @@ zpool create \
     -O compression=zstd:2 \
     \
     "$ENV_POOL_NAME" \
-    mirror \
-    "$@"
-
-## Done
+    mirror "$@"
 exit $?
