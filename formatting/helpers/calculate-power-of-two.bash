@@ -2,25 +2,22 @@
 function helptext {
     echo 'Usage: calculate-power-of-two.bash number'
     echo 'Calculates how many positive powers of two a given number is, and returns that number.'
-    echo "Numbers that are not positive integer powers of two return '-1'."
+    echo "Numbers that are not positive integer powers of two return nothing."
 }
 
 ## Ensure correct number of arguments are passed
 if [[ $# != 1 ]]; then
     helptext >&2
-    echo '-1'
     exit 1
 fi
 
 ## Detect whether an integer
 if ! expr "$1" + 0 &>/dev/null; then
-    echo '-1'
     exit 2
 fi
 
 ## Detect whether positive
 if [[ $1 -le 0 ]]; then
-    echo '-1'
     exit 3
 fi
 
@@ -37,6 +34,5 @@ if [[ $INTEGER -eq 1 ]]; then
     echo "$EXPONENT"
     exit 0
 else
-    echo '-1'
     exit 4
 fi
