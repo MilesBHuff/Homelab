@@ -19,9 +19,11 @@ fi
 
 ## Partition the disk
 set -e
+declare -i EXIT_CODE=0
 for DEVICE in "$@"; do
     if [[ ! -b "$DEVICE" ]]; then
         echo "ERROR: $DEVICE is not a valid block device." >&2
+        EXIT_CODE=2
         continue
     fi
     ## Create GPT partition table
@@ -31,6 +33,4 @@ for DEVICE in "$@"; do
     ## Create SVDEV partition
     sgdisk --new=2:0:0 --typecode=2:BF01 --change-name=2:SVDEV "$DEVICE"
 done
-
-## Done
-exit 0
+exit $EXIT_CODE
