@@ -26,7 +26,7 @@ ENV_FILE='./env.sh'
 if [[ -f "$ENV_FILE" ]]; then
     source ./env.sh
 else
-    echo "ERROR: Missing '$ENV_FILE'."
+    echo "ERROR: Missing '$ENV_FILE'." >&2
     exit 2
 fi
 
@@ -35,7 +35,7 @@ fi
 ASHIFT_SCRIPT='./helpers/calculate-powers-of-two.bash'
 [[ -x "$ASHIFT_SCRIPT" ]] && ASHIFT=$("$ASHIFT_SCRIPT" $SECTOR_SIZE)
 if [[ -z $ASHIFT ]]; then
-    echo "ERROR: Misconfigured sector sizes in '$ENV_FILE'."
+    echo "ERROR: Misconfigured sector sizes in '$ENV_FILE'." >&2
     exit 3
 fi
 
