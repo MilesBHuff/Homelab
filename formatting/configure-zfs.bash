@@ -8,7 +8,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 ## Get environment variables
-ENV_FILE='./env.sh'; if [[ -f "$ENV_FILE" ]]; then source ./env.sh; else echo "ERROR: Missing '$ENV_FILE'."; exit -1; fi
+ENV_FILE='../env.sh'; if [[ -f "$ENV_FILE" ]]; then source ../env.sh; else echo "ERROR: Missing '$ENV_FILE'."; exit -1; fi
 if [[ \
     -z "$ENV_ACCEPTABLE_DATA_LOSS_SECONDS" ||\
     -z "$ENV_SLOWEST_HDD_MAX_SPEED_MBPS" ||\
@@ -27,7 +27,7 @@ chmod 644 "$FILE"
 echo "options zfs l2arc_write_max=$(($ENV_SLOWEST_SSD_MAX_SPEED_MBPS / 2))" >> "$FILE"
 echo "options zfs l2arc_write_boost=$(($ENV_THEORETICAL_MAX_SSD_SPEED_MBPS - ($ENV_SLOWEST_SSD_MAX_SPEED_MBPS / 2)))" >> "$FILE"
 ##
-echo "options zfs zfs_immed_write_size=$ENV_SMALL_FILE_THRESHOLD" >> "$FILE"
+echo "options zfs zfs_immediate_write_sz=$ENV_SMALL_FILE_THRESHOLD" >> "$FILE"
 ##
 echo "options zfs zfs_txg_timeout=$ENV_ACCEPTABLE_DATA_LOSS_SECONDS" >> "$FILE"
 echo "options zfs zfs_txg_size_limit=$(($ENV_ACCEPTABLE_DATA_LOSS_SECONDS * ($ENV_SLOWEST_HDD_AVG_SPEED_MBPS * (1024**2))))" >> "$FILE"
