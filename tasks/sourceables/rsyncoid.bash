@@ -24,9 +24,9 @@ function rsyncoid {
         return 4
     }
 
-    local TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
+    local TIMESTAMP=$(date +"%Y-%m-%dT%H-%M-%S")
     rsync \
         -ahAEHPSX --append-verify \
         "$1" "$2" \
-        2> >(tee "$LOGDIR/rsyncoid_$TIMESTAMP.stderr.txt" >&2)
+        2> >(tee "$LOGDIR/$TIMESTAMP.stderr.txt" >&2)
 }
