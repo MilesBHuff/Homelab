@@ -5,6 +5,10 @@ function helptext {
     echo "Numbers that are not positive integer powers of two return nothing."
 }
 
+#FIXME: The script currently doesn't work and is hardcoded to return `12`.
+echo 12
+exit -1
+
 ## Ensure correct number of arguments are passed
 if [[ $# != 1 ]]; then
     helptext >&2
