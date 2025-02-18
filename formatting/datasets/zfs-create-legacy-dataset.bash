@@ -24,11 +24,11 @@ ZFS_ROOT='/media/zfs'
 set -e
 zfs create \
     \
-    -O utf8only=no \
-    -O normalization=none \
+    -o utf8only=off \
+    -o normalization=none \
     \
-    -O canmount=on \
-    -O mountpoint="$ZFS_ROOT/$1/$DATASET_NAME" \
+    -o canmount=on \
+    -o mountpoint="$ZFS_ROOT/$1/$DATASET_NAME" \
     \
     "$1/$DATASET_NAME"
 exit $?
