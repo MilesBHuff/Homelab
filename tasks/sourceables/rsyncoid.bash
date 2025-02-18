@@ -14,7 +14,7 @@ function rsyncoid {
         return 2
     fi
 
-    local LOGDIR="${RSYNCOID_LOGDIR:-/tmp/rsync}"
+    local LOGDIR="${RSYNCOID_LOGDIR:-/tmp/rsyncoid}"
     mkdir -p "$LOGDIR" > /dev/null 2>&1 || {
         echo "Error: Unable to create '$LOGDIR'." >&2
         return 3
@@ -28,6 +28,5 @@ function rsyncoid {
     rsync \
         -achAEHPSX --append-verify \
         "$1" "$2" \
-        > >(tee "$LOGDIR/rsync_$TIMESTAMP.stdout.txt") \
-        2> >(tee "$LOGDIR/rsync_$TIMESTAMP.stderr.txt" >&2)
+        2> >(tee "$LOGDIR/rsyncoid_$TIMESTAMP.stderr.txt" >&2)
 }
