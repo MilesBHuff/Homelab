@@ -73,8 +73,8 @@ zpool create \
     \
     -O compression=zstd-3 \
     \
-    -O canmount=off \
-    -O mountpoint=none \
+    -O canmount=on \
+    -O mountpoint="$ENV_ZFS_ROOT/$ENV_DAS_POOL_NAME" \
     \
     "$ENV_DAS_POOL_NAME" \
     mirror "$@"

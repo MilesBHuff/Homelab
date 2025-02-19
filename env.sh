@@ -14,6 +14,10 @@ export ENV_SVDEV_NAME='svdev'
 
 export ENV_OS_LUKS_NAME="crypt-$ENV_OS_NAME"
 
+## Paths
+
+export ENV_ZFS_ROOT='/media/zfs'
+
 ## Mount Options
 
 export ENV_ESP_MOUNT_OPTIONS='noatime,lazytime,sync,flush,tz=UTC,iocharset=utf8,fmask=0137,dmask=0027,nodev,noexec,nosuid'

@@ -73,8 +73,8 @@ zpool create \
     \
     -O compression=zstd-3 \
     \
-    -O canmount=off \
-    -O mountpoint=none \
+    -O canmount=on \
+    -O mountpoint=/ \
     \
     "$ENV_OS_POOL_NAME" \
     mirror "$@"
