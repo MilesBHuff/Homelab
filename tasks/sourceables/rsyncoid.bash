@@ -9,8 +9,15 @@ function rsyncoid {
         return 1
     fi
 
-    if ! command -v rsync &>/dev/null; then
-        echo 'Error: `rsync` not in `PATH`.' >&2
+    RSYNC=$(which rsync)
+    #RSYNC=~/.local/bin/rsync
+    #RSYNC=~/.local/bin/prsync
+    if [[ ! -f "$RSYNC" ]]; then
+        echo "Error: '$RSYNC' not extant." >&2
+        return 2
+    fi
+    if [[ ! -x "$RSYNC" ]]; then
+        echo "Error: '$RSYNC' not executable." >&2
         return 2
     fi
 
@@ -25,7 +32,7 @@ function rsyncoid {
     }
 
     local TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
-    rsync \
+    "$RSYNC" \
         -hP -HS -aAEX -W --numeric-ids --no-compress --no-checksum --bwlimit=0 \
         "$1" "$2" \
         2> >(tee "$LOGDIR/rsyncoid_$TIMESTAMP.stderr.txt" >&2)
