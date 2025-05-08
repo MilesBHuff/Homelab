@@ -1,6 +1,21 @@
 #!/usr/bin/env bash
 set -e
 
+## Make sure we're root
+if [[ $EUID -ne 0 ]]; then
+    echo "ERROR: This script must be run as root." >&2
+    exit 1
+fi
+
+## Get environment variables
+ENV_FILE='../env.sh'; if [[ -f "$ENV_FILE" ]]; then source ../env.sh; else echo "ERROR: Missing '$ENV_FILE'."; exit -1; fi
+if [[ \
+    -z "$ENV_ZFS_ROOT"
+]]; then
+    echo "ERROR: Missing variables in '$ENV_FILE'!" >&2
+    exit 3
+fi
+
 ## Variables
 [[ ! -z "$1" ]] && SRC_DS="$1" || SRC_DS='nas-pool'
 [[ ! -z "$2" ]] && OUT_DS_PARENT="$2" || OUT_DS_PARENT='das-pool'
@@ -45,7 +60,7 @@ esac
 
 ## After a replication
 zfs list -H -o name -r "$OUT_DS" | while read -r DS; do
-    MOUNTPOINT="/mnt/$OUT_DS_PARENT${DS#$OUT_DS_PARENT}"
+    MOUNTPOINT="$ENV_ZFS_ROOT/$OUT_DS_PARENT${DS#$OUT_DS_PARENT}"
     zfs set mountpoint="$MOUNTPOINT" "$DS"
     zfs set readonly=on "$DS"
 done
