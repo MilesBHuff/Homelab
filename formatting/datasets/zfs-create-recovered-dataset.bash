@@ -49,7 +49,7 @@ zfs create \
     -o mountpoint="$ENV_ZFS_ROOT/$1/$DATASET_NAME" \
     \
     "$1/$DATASET_NAME"
-set +e
-declare -i EXIT_CODE=$?
+
+## Done
 zfs snapshot "$1/$DATASET_NAME@$ENV_SNAPSHOT_NAME_INITIAL"
-exit $EXIT_CODE
+exit 0
