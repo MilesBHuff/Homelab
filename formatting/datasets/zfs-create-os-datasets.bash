@@ -24,15 +24,6 @@ if [[
 fi
 
 ## Declare variables
-
-#declare -a DATASETS=('/os' "/os/$ENV_SNAPSHOT_NAME_INITIAL" '/data' '/data/home' '/data/srv' '/exclude' '/exclude/var_cache' '/exclude/var_log' '/exclude/var_spool' '/exclude/var_tmp' '/exclude/tmp' '/virtual' '/virtual/var_lib_vz' '/virtual/var_lib_lxc' '/virtual/var_lib_libvirt' '/virtual/var_lib_qemu' '/virtual/var_lib_rrdcached' '/virtual/var_lib_pve-cluster' '/virtual/var_lib_pve-manager' '/virtual/var_lib_docker') ## The idea is to allow for separate OS snapshots and data snapshots while excluding unimportant tempfiles.
-#declare -a   MOUNTS=(   ''                              '/'      ''      '/home'      '/srv'         ''         '/var/cache'         '/var/log'         '/var/spool'         '/var/tmp'         '/tmp'         ''         '/var/lib/vz'         '/var/lib/lxc'         '/var/lib/libvirt'         '/var/lib/qemu'         '/var/lib/rrdcached'         '/var/lib/pve-cluster'         '/var/lib/pve-manager'         '/var/lib/docker')
-
-#NOTE: All-caps is conventional for the dataset containing the OS, because capital letters sort before lowercase, and therefore load before lowercase.
-#WARN: `/var/lib/apt/extended_states` and `/var/lib/shells.state` need to be included in system snapshots, but the other items in their parent directories do not. Symlinking is not viable because these files are periodically recreated. While we can live with snapshotting all of `/var/lib/apt`, doing so for all of `/var/lib` would be excessive, and is not worth it to have an in-sync `shells.state`.
-# declare -a DATASETS=('/data' '/data/home' '/data/home/root' '/data/srv' '/data/var'  '/OS' '/OS/debian' '/OS/debian/var:lib:apt' '/OS/debian/var:lib:dkms' '/OS/debian/var:lib:dpkg' '/OS/debian/var:lib:sgml-base' '/OS/debian/var:lib:ucf' '/OS/debian/var:lib:xml-core') ## The idea is to allow for separate OS snapshots and data snapshots while excluding unimportant tempfiles.
-# declare -a   MOUNTS=(     ''      '/home'           '/root'      '/srv'      '/var'     ''          '/'           '/var/lib/apt'           '/var/lib/dkms'           '/var/lib/dpkg'           '/var/lib/sgml-base'           '/var/lib/ucf'           '/var/lib/xml-core')
-
 #NOTE: All-caps is conventional for the dataset containing the OS, because capital letters sort before lowercase, and therefore load before lowercase.
 declare -a DATASETS=('/data' '/data/home' '/data/home/root' '/data/srv' '/data/var'  '/OS' '/OS/debian') ## The idea is to allow for separate OS snapshots and data snapshots while excluding unimportant tempfiles. The few things in `/var` that need to be kept with rollbacks can be placed into `/varkeep` and symlinked/bind-mounted back to their original locations.
 declare -a   MOUNTS=(     ''      '/home'           '/root'      '/srv'      '/var'     ''          '/')
