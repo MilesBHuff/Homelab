@@ -60,12 +60,15 @@ echo ':: Configuring system...'
 apt install -y locales
 dpkg-reconfigure locales
 apt install -y console-setup
-read -p "Fixed 8x13 has the largest character set; consider selecting it as your font. Press 'Enter' to continue. " FOO
+read -p "Note: 8x16 is considered kinda the standard size. Bold is easiest to read. VGA is probably your best bet. Press 'Enter' to continue. " FOO
 dpkg-reconfigure console-setup
 dpkg-reconfigure keyboard-configuration
 dpkg-reconfigure tzdata
 echo 'Please enter a complex password for the root user: '
 passwd
+for FILE in $(ls -A /etc/skel); do cp "$FILE" /root/; done
+read -p "Please enter a username for your personal user: " USERNAME
+adduser "$USERNAME"
 
 ## Get our packages up-to-date
 echo ':: Updating...'
@@ -223,7 +226,7 @@ KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE apparmor=1 security=apparmor"
 ## Install daemons
 echo ':: Installing daemons...'
 ## Generally useful
-apt install -y systemd-oomd clamav clamav-daemon
+apt install -y chrony clamav clamav-daemon systemd-oomd
 systemctl enable clamav-daemon
 systemctl enable clamav-freshclam
 ## Niche
@@ -259,15 +262,16 @@ echo ':: Installing applications...'
 tasksel --new-install
 apt install -y popularity-contest
 ## Common applications
-apt install -y chrony cups rsync tmux
+apt install -y cups rsync tmux unzip
 ## Niche applications
-apt install -y
+# apt install -y
 
-## Final configuration
+## More configuration
 echo ':: Additional configurations...'
 KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE page_alloc.shuffle=1"
 read -p 'Please enter your wireless regulatory domain: ('US' for the USA) ' REGDOM
 KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE cfg80211.ieee80211_regdom=$REGDOM"
+echo 'set -g status-position top' > ~/.tmux.conf
 
 ## Disable various compressions (ZFS does compression for us.)
 echo ':: Avoiding double-compression...'
@@ -284,6 +288,35 @@ done
 ## Reconfigure FSH
 echo ':: Modifying filesystem hierarchy...'
 bash ../configure-filesystem-hierarchy.bash
+
+## Better bitmap font
+echo ':: Installing better bitmap font...'
+FILE='/etc/default/console-setup'
+# curl 'https://github.com/bynux-gh/bynfont/releases/download/v2.1/bynfont.psfu.gz' -o /usr/local/share/consolefonts/Bynfont.psfu.gz
+# ln -s /usr/local/share/consolefonts/Bynfont.psfu.gz /usr/share/consolefonts/
+# cat "$FILE" | sed -r 's/^(FONTFACE)=".*/\1="Bynfont"/' | sed -ir 's/^# (FONTSIZE)=.*/\1="8x16/' '/etc/initramfs-tools/initramfs.conf' > "$FILE.new"
+cd /tmp
+git clone https://github.com/sunaku/tamzen-font.git
+# cd tamzen-font/psf
+# gzip --best *
+# cp * /usr/local/share/consolefonts/
+# cd /usr/local/share/consolefonts
+# rm -rf /tmp/tamzen-font
+# ln -s * /usr/share/consolefonts/
+# cat "$FILE" | sed -r 's/^(FONTFACE)=".*/\1="TamzenForPowerline"/' | sed -ir 's/^# (FONTSIZE)=.*/\1="7x13/' '/etc/initramfs-tools/initramfs.conf' > "$FILE.new"
+cd tamzen-font/bdf
+apt install -y bdf2psf
+mkdir psf
+B2P='/usr/share/bdf2psf'
+bdf2psf --fb Tamzen8x16b.bdf "$B2P/standard.equivalents" "$B2P/ascii.set+$B2P/linux.set+$B2P/useful.set" 512 psf/TamzenBold8x16.psf
+cd psf
+gzip --best *
+cp * /usr/local/share/consolefonts/
+cd /usr/local/share/consolefonts
+rm -rf /tmp/tamzen-font
+ln -s * /usr/share/kbd/consolefonts/
+cat "$FILE" | sed -r 's/^(FONTFACE)=".*/\1="TamzenBold"/' | sed -ir 's/^# (FONTSIZE)=.*/\1="8x16/' '/etc/initramfs-tools/initramfs.conf' > "$FILE.new"
+cd "$CWD"
 
 ## Wrap up
 echo ':: Wrapping up...'
