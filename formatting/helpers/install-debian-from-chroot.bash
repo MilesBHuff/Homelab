@@ -226,6 +226,11 @@ cat > /etc/systemd/system/tmp.mount.d/override.conf <<EOF
 Options=mode=1777,nosuid,nodev,size=5G,noatime
 ## 5G is enough space to have 1G free while extracting a 4G archive. 1G is plenty for normal operation. ## No point in `lazytime` when the filesystem is in RAM.
 EOF
+cat > /etc/systemd/system/console-setup.service.d/override.conf <<EOF
+[Unit]
+Requires=tmp.mount
+After=tmp.mount
+EOF #BUG: Resolves an issue where console-setup can happen shortly before tmpfs mounts and accordingly fail when tmpfs effectively deletes /tmp while console-setup is happening.
 systemctl daemon-reload
 
 ## Install MAC
