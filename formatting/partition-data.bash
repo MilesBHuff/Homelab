@@ -35,8 +35,7 @@ if [[
     exit 3
 fi
 
-## Partition the disk
-set -e
+## Validate the passed devices
 declare -i EXIT_CODE=0
 for DEVICE in "$@"; do
     if [[ ! -b "$DEVICE" ]]; then
@@ -44,12 +43,22 @@ for DEVICE in "$@"; do
         EXIT_CODE=2
         continue
     fi
+done
+set -e
+
+## Clear the drives
+for DEVICE in "$@"; do
+    ## TRIM entire device (also wipes data, albeit insecurely)
+    blkdiscard -f "$DEVICE" &
+    ## Create GPT partition table
+    sgdisk --zap-all "$DEVICE" &
+done
+wait
+
+## Partition the drives
+for DEVICE in "$@"; do
     ## Ensure correct alignment value.
     declare -i ALIGNMENT=$(((1024 ** 2) / $(blockdev --getss "$DEVICE"))) ## Always equals 1MiB in sectors. Is 2048 unless drive is 4Kn, in which case is 256. This math avoids the undesirable default situation which is to waste 8MiB instead of 1MiB on 4Kn disks.
-    ## TRIM entire device (also wipes data, albeit insecurely)
-    blkdiscard -f "$DEVICE"
-    ## Create GPT partition table
-    sgdisk --zap-all "$DEVICE"
     ## Create reserved partition (to allow for future drive size mismatches)
     sgdisk --set-alignment=1 --new=9:-"$ENV_ZFS_SECTORS_RESERVED":0 --typecode=9:BF07 --change-name=9:"$ENV_NAME_RESERVED" "$DEVICE"
     ## Create SLOG partition
