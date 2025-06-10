@@ -78,9 +78,9 @@ zpool create -f \
     -O encryption="$ENV_ZPOOL_ENCRYPTION" \
     -O pbkdf2iters="$ENV_ZPOOL_PBKDF2ITERS" \
     -O keyformat=passphrase \
-    -O keylocation="/env/zfs/keys/$ENV_POOL_NAME_OS.key" \
+    -O keylocation="file:///etc/zfs/keys/$ENV_POOL_NAME_OS.key" \
     \
-    -O compression="$ENV_ZPOOL_COMPRESSION_FREE" \
+    -O compression="$ENV_ZPOOL_COMPRESSION_BEST" \
     \
     -O canmount=off \
     -O mountpoint=none \
@@ -89,6 +89,8 @@ zpool create -f \
     "$ENV_POOL_NAME_OS" \
     mirror "$@"
     # -O checksum="$ENV_ZPOOL_CHECKSUM" \ ## Debian sucks and ships an ancient version of ZFS that doesn't support BLAKE3, and there is no canonical way to get ZFS 2.2 onto Bookworm. Shit distro.
+echo 'Make sure to change compression from BEST to FAST after installation!'
+echo "(zstd decompression times are essentially constant, so compressing extra during installation (when perf doesn't matter) is free savings.)"
 
 ## First import
 zpool export "$ENV_POOL_NAME_OS"

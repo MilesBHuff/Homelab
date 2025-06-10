@@ -95,6 +95,15 @@ echo ':: Installing LZ4...'
 apt install -y lz4
 echo lz4 >> /etc/initramfs-tools/modules
 
+## Compile zstd and lz4
+## (The latest versions of these are critical to the system and have huge performance gains, yet Debian doesn't ship them.)
+## Debian forces you to pull in over 50 packages from testing just to update from one bugfix point-release to another in zstd, which is ABSOLUTELY asinine.
+## We have to compile them from source, or manually install a dpkg.
+echo ':: Getting latest compression algorithms...'
+#TODO: LZ4 9.10.0
+#TODO: ZSTD 1.5.7
+sudo apt install -y zlib1g-dev liblzma-dev liblz4-dev #NOTE: Only needed if compiling from source.
+
 ## Install and configure ZFS
 echo ':: Installing ZFS...'
 apt install -y -t bookworm-backports zfsutils-linux zfs-dkms

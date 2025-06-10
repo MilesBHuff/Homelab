@@ -46,7 +46,8 @@ for DEVICE in "$@"; do
 done
 set -e
 
-## Clear the drives
+## Clear the devices
+echo ':: Preparing devices for partitioning...'
 for DEVICE in "$@"; do
     ## TRIM entire device (also wipes data, albeit insecurely)
     blkdiscard -f "$DEVICE" &
@@ -54,16 +55,29 @@ for DEVICE in "$@"; do
     sgdisk --zap-all "$DEVICE" &
 done
 wait
+echo ':: Done!'
+echo
 
-## Partition the drives
+## Partition the devices
 for DEVICE in "$@"; do
+    echo ":: Partitioning '$DEVICE'..."
+
     ## Ensure correct alignment value.
     declare -i ALIGNMENT=$(((1024 ** 2) / $(blockdev --getss "$DEVICE"))) ## Always equals 1MiB in sectors. Is 2048 unless drive is 4Kn, in which case is 256. This math avoids the undesirable default situation which is to waste 8MiB instead of 1MiB on 4Kn disks.
-    ## Create reserved partition (to allow for future drive size mismatches)
+    echo "'$ALIGNMENT': This should be 2048 (logical sector size == 512B) or 256 (4Kn). If it's neither of those, investigate."
+
+    echo ':: Creating padding partition...'
+    echo 'This partition sits at the end of the drive, and helps you to resilver with drives of slightly different sizes.'
+    echo 'This partition is equal to 8MiB, and is not aligned to drive sectors. Creating it will throw warnings about alignment; ignore them.'
     sgdisk --set-alignment=1 --new=9:-"$ENV_ZFS_SECTORS_RESERVED":0 --typecode=9:BF07 --change-name=9:"$ENV_NAME_RESERVED" "$DEVICE"
-    ## Create SLOG partition
-    sgdisk --set-alignment=$ALIGNMENT --new=1:0:+6GiB --typecode=1:BF02 --change-name=1:"$ENV_NAME_SLOG" "$DEVICE" ## The absolute worst-possible-case scenario with default settings is apparently 4.8GiB. 5GiB covers that, and 6GiB covers that without performance degradation.
-    ## Create SVDEV partition
+
+    echo ':: Creating SLOG partition...'
+    sgdisk --set-alignment=$ALIGNMENT --new=1:0:+12GiB --typecode=1:BF02 --change-name=1:"$ENV_NAME_SLOG" "$DEVICE"
+
+    echo ':: Creating SVDEV partition...'
     sgdisk --set-alignment=$ALIGNMENT --new=2:0:0 --typecode=2:BF01 --change-name=2:"$ENV_NAME_SVDEV" "$DEVICE"
+
+    echo ":: Done with '$DEVICE'."
+    echo
 done
 exit $EXIT_CODE

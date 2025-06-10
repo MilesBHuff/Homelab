@@ -79,7 +79,7 @@ zpool create -f \
     -O encryption="$ENV_ZPOOL_ENCRYPTION" \
     -O pbkdf2iters="$ENV_ZPOOL_PBKDF2ITERS" \
     -O keyformat=passphrase \
-    -O keylocation="/env/zfs/keys/$ENV_POOL_NAME_DAS.key" \
+    -O keylocation="file:///etc/zfs/keys/$ENV_POOL_NAME_DAS.key" \
     \
     -O compression="$ENV_ZPOOL_COMPRESSION_BALANCED" \
     \

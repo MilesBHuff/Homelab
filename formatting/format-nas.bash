@@ -42,7 +42,7 @@ if [[
     -z "$ENV_ZPOOL_ATIME" ||\
     -z "$ENV_ZPOOL_CASESENSITIVITY" ||\
     -z "$ENV_ZPOOL_CHECKSUM" ||\
-    -z "$ENV_ZPOOL_COMPRESSION_BALANCED" ||\
+    -z "$ENV_ZPOOL_COMPRESSION_FAST" ||\
     -z "$ENV_ZPOOL_ENCRYPTION" ||\
     -z "$ENV_ZPOOL_NORMALIZATION"
 ]]; then
@@ -63,15 +63,21 @@ fi
 ## Are we adding an L2ARC?
 [[ $# -eq 4 ]] && CACHE="cache $4"
 
-## Clear out old labels and partitions (necessary to avoid issues on import later)
-for DEVICE in "${1[@]}"; do
+echo ':: Unmounting and exporting old pool...'
+zpool export -f "$ENV_POOL_NAME_NAS"
+
+echo ':: Clearing out old filesystems...'
+echo '(This is necessary to avoid issues on import later.)'
+for DEVICE in $(echo $1 $2 $3 $4 | xargs); do
     zpool labelclear -f "$DEVICE"
     wipefs -a "$DEVICE"
 done
 
-## Create pool
+echo ':: Creating the pool...'
 set -e
 zpool create -f \
+    -o compatibility="$ENV_ZPOOL_COMPATIBILITY" \
+    \
     -o ashift="$ASHIFT" \
     -O recordsize="$ENV_RECORDSIZE_HDD" \
     -O special_small_blocks="$ENV_THRESHOLD_SMALL_FILE" \
@@ -97,9 +103,9 @@ zpool create -f \
     -O encryption="$ENV_ZPOOL_ENCRYPTION" \
     -O pbkdf2iters="$ENV_ZPOOL_PBKDF2ITERS" \
     -O keyformat=passphrase \
-    -O keylocation="/env/zfs/keys/$ENV_POOL_NAME_NAS.key" \
+    -O keylocation="file:///etc/zfs/keys/$ENV_POOL_NAME_NAS.key" \
     \
-    -O compression="$ENV_ZPOOL_COMPRESSION_BALANCED" \
+    -O compression="$ENV_ZPOOL_COMPRESSION_FAST" \
     \
     -O canmount=on \
     -O mountpoint="$ENV_ZFS_ROOT/$ENV_POOL_NAME_NAS" \
@@ -110,20 +116,23 @@ zpool create -f \
     log mirror $3 \
     $CACHE
 
-## First import
-zpool export "$ENV_POOL_NAME_NAS"
+echo ':: Importing...'
+zpool export -f "$ENV_POOL_NAME_NAS"
 zpool import -d /dev/disk/by-id "$ENV_POOL_NAME_NAS"
 zfs load-key "$ENV_POOL_NAME_NAS"
 
-## Configure partitions
+echo ':: Adjusting partition metadata...'
 sgdisk --typecode=1:bf02 "$4" ## Makes more sense for the cache device to use this code than the default.
 sgdisk --change-name=1:"$ENV_NAME_CACHE" "$4" ## For consistency with the non-whole-disk partition labels.
 sgdisk --change-name=9:"$ENV_NAME_RESERVED" "$4" ## Empty by default
-for DEVICE in "${1[@]}"; do
+for DEVICE in $1; do
     sgdisk --change-name=1:"$ENV_NAME_VDEV" "$DEVICE" ## For consistency with the non-whole-disk partition labels.
     sgdisk --change-name=9:"$ENV_NAME_RESERVED" "$DEVICE" ## Empty by default
-do
+done
+partprobe
 
-## Done
+echo ':: Creating first snapshot...'
 zfs snapshot "${ENV_POOL_NAME_NAS}@initial"
+
+echo ':: Done.'
 exit 0
