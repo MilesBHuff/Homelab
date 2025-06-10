@@ -1,31 +1,55 @@
 #!/usr/bin/env bash
-[[ ! $# -eq 1 || ! -e "$1" ]] && echo 'Please specify a test path.' && exit 1
-zfs set compression=off nas-pool
+[[ ! $# -eq 1 || ! -e "$1" ]] && echo "Please specify a path to compress for the test. " && exit 1
 
-echo 'THEORETICAL TEST'
-OUT='/dev/null'
-echo 'tar'
-tar -cf - "$1" 2>/dev/null | pv >"$OUT"
+DATASET='nas-pool/test'
+zfs set compression=off "$DATASET"
+
+echo 'Preparing paths...'
+FAKEOUT='/dev/null'
+REALOUT='/media/zfs/$DATASET/compression'
+rm -rf "$REALOUT"
+mkdir -p "$REALOUT"
+echo
+
+echo 'Preparing tarfile...'
+TEMPFILE="$(mktemp).tar"
+tar -cf - "$1" 2>/dev/null >"$TAR"
+echo
+
+echo 'IN-MEMORY TEST'
+echo 'cat'
+pv "$TAR" | cat >"$FAKEOUT"
 echo 'lz4'
-tar -cf - "$1" 2>/dev/null | pv | lz4 -c >"$OUT"
-for LVL in {1..19}; do
-    echo "zstd:$LVL"
-    tar -cf - "$1" 2>/dev/null | pv | zstd -$LVL -c >"$OUT"
+pv "$TAR" | lz4 -B4 --fast=1 -c >"$FAKEOUT"
+echo "zstd-fast-1"
+pv "$TAR" | zstd --fast=1 -c >"$FAKEOUT"
+for LVL in {1..9}; do
+    echo "zstd-$LVL"
+    pv "$TAR" | zstd -$LVL -c >"$FAKEOUT"
 done
 echo
 
-echo 'REAL TEST'
-OUT='/media/zfs/nas-pool/compression-test'
-mkdir -p "$OUT"
-echo 'tar'
-tar -cf - "$1" 2>/dev/null | pv >"$OUT/0.tar"
+echo 'TO-DISK TEST'
+echo 'cat'
+pv "$TAR" | cat >"$REALOUT/0.tar"
 echo 'lz4'
-tar -cf - "$1" 2>/dev/null | pv | lz4 -c >"$OUT/0.tar.lz4"
-for LVL in {1..19}; do
-    echo "zstd:$LVL"
-    tar -cf - "$1" 2>/dev/null | pv | zstd -$LVL -c >"$OUT/$LVL.tar.zstd"
+pv "$TAR" | lz4 -B4 --fast -c >"$REALOUT/0.tar.lz4"
+echo "zstd-fast-1"
+pv "$TAR" | zstd --fast=1 -c >"$REALOUT/0.tar.zstd"
+for LVL in {1..9}; do
+    echo "zstd-$LVL"
+    pv "$TAR" | zstd -$LVL -c >"$REALOUT/$LVL.tar.zstd"
 done
-ls -s "$OUT"
+echo
+ls -s "$REALOUT"
+rm -rf "$REALOUT" && mkdir -p "$REALOUT"
 
-zfs set compression=zstd-4 nas-pool
+#echo 'TIME TEST'
+#time cat "$TAR" | zstd --fast=1 -c >/dev/null
+#time cat "$TAR" | lz4 -B4 --fast - >/dev/null
+#echo
+
+## Done
+zfs set compression=zstd-fast-1 "$DATASET"
+rm -f "$TAR"
 exit 0
