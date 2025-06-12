@@ -49,8 +49,9 @@ echo ':: Bringing over ZFS imports...'
 mkdir -p etc/zfs
 set +e
 cp /etc/zfs/zpool.cache etc/zfs
-cp /etc/zfs/zroot.key etc/zfs
+cp "/etc/zfs/keys/$ENV_POOL_NAME_OS.key" "etc/zfs/keys/$ENV_POOL_NAME_OS.key"
 set -e
+cp /etc/hostid etc/hostid ## ZFS keeps track of the host that imported it in its cachefile, so we need to keep the same hostid as the LiveCD.
 
 ## Bind-mount system directories for chroot
 echo ':: Bindmounting directories for chroot...'
