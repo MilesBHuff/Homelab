@@ -242,6 +242,8 @@ Requires=local-fs.target
 [Service]
 Type=oneshot
 ExecStart=$SCRIPT mount
+[Install]
+WantedBy=multi-user.target
 EOD
 systemctl enable "$SERVICE"
 
@@ -254,6 +256,8 @@ Requires=zfs-mount.service
 [Service]
 Type=oneshot
 ExecStart=$SCRIPT zfs
+[Install]
+WantedBy=multi-user.target
 EOD
 systemctl enable "$SERVICE"
 
