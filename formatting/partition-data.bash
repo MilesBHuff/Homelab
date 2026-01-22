@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 function helptext {
-    echo 'Usage: partition-ssd-with-data.bash device0 [device1 ...]'
+    echo 'Usage: partition-data.bash device0 [device1 ...]'
     echo
     echo 'Please pass as arguments all the block devices you wish to partition.'
     echo 'The provided block devices will all be given the same partition layout.'

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 function helptext {
-    echo "Usage: zfs-format-nas-drives.bash 'device0 device1 [device2 ...]' 'device0 device1 [device2 ...]' 'device0 device1 [device2 ...]' ['device0']"
+    echo "Usage: format-nas.bash 'device0 device1 [device2 ...]' 'device0 device1 [device2 ...]' 'device0 device1 [device2 ...]' ['device0']"
     echo
     echo 'The first argument is a space-delimited list of block devices to use for the main storage pool.'
     echo 'The second argument is a space-delimited list of block devices to use for the special vdev.'

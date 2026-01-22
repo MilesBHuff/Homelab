@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 function helptext {
-    echo "Usage: zfs-format-das-drives.bash device0 [device1 ...]"
+    echo "Usage: format-das.bash device0 [device1 ...]"
     echo
     echo 'Pass at least one block device as an argument.'
     echo 'If more than one device is specified, then all will be made into mirrors of each other.'

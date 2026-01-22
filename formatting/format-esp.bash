@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 function helptext {
-    echo "Usage: format-nas-esp.bash 'device0 device1 [device2 ...]'"
+    echo "Usage: format-esp.bash 'device0 device1 [device2 ...]'"
     echo
     echo 'Pass at least two block devices as arguments.'
     echo 'All specified devices will be made into mirrors of each other and formatted as EFI System Partitions.'

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 function helptext {
-    echo "Usage: zfs-format-nas-os.bash device0 [device1 ...]"
+    echo "Usage: format-os.bash device0 [device1 ...]"
     echo
     echo 'Pass at least one block device as an argument.'
     echo 'If more than one device is specified, then all will be made into mirrors of each other.'
@@ -87,7 +87,7 @@ zpool create -f \
     -R "$ENV_ZFS_ROOT/$ENV_POOL_NAME_OS" \
     \
     "$ENV_POOL_NAME_OS" \
-    mirror "$@"
+    "$MIRROR" "$@"
     # -O checksum="$ENV_ZPOOL_CHECKSUM" \ ## Debian sucks and ships an ancient version of ZFS that doesn't support BLAKE3, and there is no canonical way to get ZFS 2.2 onto Bookworm. Shit distro.
 echo 'Make sure to change compression from BEST to FAST after installation!'
 echo "(zstd decompression times are essentially constant, so compressing extra during installation (when perf doesn't matter) is free savings.)"
