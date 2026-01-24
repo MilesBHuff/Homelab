@@ -9,9 +9,9 @@ set -euo pipefail
 
 ## Get environment
 CWD=$(pwd)
-ENV_FILE='../env.sh'
+ENV_FILE='../../env.sh'
 if [[ -f "$ENV_FILE" ]]; then
-    source ../env.sh
+    source "$ENV_FILE"
 else
     echo "ERROR: Missing '$ENV_FILE'." >&2
     exit 2
