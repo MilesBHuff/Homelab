@@ -26,11 +26,11 @@ export ENV_ZFS_ROOT='/media/zfs'
 ## Mount Options
 
 export ENV_MOUNT_OPTIONS_ESP='noatime,lazytime,sync,flush,tz=UTC,iocharset=utf8,fmask=0137,dmask=0027,nodev,noexec,nosuid'
-export ENV_MOUNT_OPTIONS_OS='noatime,lazytime,ssd,discard=async,compress=lzo'
+export ENV_MOUNT_OPTIONS_OS='noatime,lazytime,ssd,discard=async,compress=lzo' ## These options are for btrfs. This variable is currently unused.
 
 ## Misc Options
 
-export ENV_SECONDS_DATA_LOSS_ACCEPTABLE=5 ## Lower is better apart from fragmentation. You want the lowest value that doesn't significantly increase fragmentation.
+export ENV_SECONDS_DATA_LOSS_ACCEPTABLE=5 ## You want the lowest value that doesn't significantly increase fragmentation.
 
 ## Drive Characteristics
 
@@ -38,8 +38,10 @@ export ENV_SECTOR_SIZE_HDD=4096
 export ENV_SECTOR_SIZE_LOGICAL_HDD=4096
 export ENV_SECTOR_SIZE_SSD=4096
 export ENV_SECTOR_SIZE_LOGICAL_SSD=512
-export ENV_SECTOR_SIZE_OS=512
-export ENV_SECTOR_SIZE_LOGICAL_OS=512
+export ENV_SECTOR_SIZE_OS=512         ## Specifically the NAS's OS
+export ENV_SECTOR_SIZE_LOGICAL_OS=512 ## Specifically the NAS's OS
+export ENV_SECTOR_SIZE_AI=4096
+export ENV_SECTOR_SIZE_LOGICAL_AI=4096
 
 ## Drive Speeds
 
