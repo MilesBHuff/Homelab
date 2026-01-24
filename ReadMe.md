@@ -2,13 +2,31 @@
 
 This repo contains scripts, configurations, etc that pertain to my homelab.
 
-## Partformatition
+## Directories
 
-This directory contains scripts that generate an optimized ZFS pool containing an HDD mirror for bulk data and an SSD mirror for SLOG + SVDEV (metadata / small files), the goal being maximum performance and longevity for relatively minimal hardware.
+### Installation
 
-## Installation
+Scripts that install an operating system to a ZFS root. These scripts are capable of handling Debian and Ubuntu, and use ZFSBootMenu to permit booting directly to an encrypted ZFS.
 
-This directory contains scripts that install operating systems to a ZFS root. These scripts are capable of handling Debian and Ubuntu, and use ZFSBootMenu to permit booting directly to an encrypted ZFS.
+### Partformatition
+
+Scripts that generate an optimized ZFS pool containing an HDD mirror for bulk data and an SSD mirror for SLOG + SVDEV (metadata / small files).
+
+### Settings
+
+Scripts that apply settings.
+
+### Sourceables
+
+Scripts that can be sourced at the commandline.
+
+### Tasks
+
+Scripts that are meant to be run from a server.
+
+### Tests
+
+Scripts that test some functionality.
 
 ## License
 
