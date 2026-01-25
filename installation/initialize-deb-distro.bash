@@ -2,7 +2,7 @@
 function helptext {
     echo "Usage: install-deb-distro.bash"
     echo
-    echo 'This script installs Debian to the target directory.'
+    echo 'This script installs Debian or Ubuntu to the target directory.'
     echo "It assumes you are running it from a LiveCD for either Debian ($DEBIAN_VERSION) or Ubuntu Server ($UBUNTU_VERSION)."
     echo 'It also assumes that you are connected to the Internet.'
 }
