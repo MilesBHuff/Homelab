@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+set -euo pipefail
+
+################################################################################
+## META
+################################################################################
+
 function helptext {
     echo "Usage: install-deb-distro-from-chroot.bash"
     echo
@@ -7,7 +13,10 @@ function helptext {
 }
 ## Special thanks to https://openzfs.github.io/openzfs-docs/Getting%20Started/Debian/Debian%20Bookworm%20Root%20on%20ZFS.html
 ## My thanks to ChatGPT (not as the author of this code (that's me), but for helping with my endless questions and providing advice)
-set -euo pipefail
+
+################################################################################
+## FUNCTIONS
+################################################################################
 
 function idempotent_append {
     ## $1: What to append
@@ -15,6 +24,10 @@ function idempotent_append {
     [[ ! -f "$2" ]] && touch "$2"
     grep -Fqx -- "$1" "$2" || printf '%s\n' "$1" >> "$2"
 }
+
+################################################################################
+## ENVIRONMENT
+################################################################################
 
 ## Get environment
 CWD=$(pwd)
@@ -42,29 +55,11 @@ if [[
     echo "ERROR: This script is designed to be run from a \`chroot\` spawned by \`install-deb-distro.bash\`." >&2
     exit 4
 fi
+KERNEL_COMMANDLINE=''
 
-## Configure hostname
-echo ':: Configuring hostname...'
-read -p "What unqualified hostname would you like?: " HOSTNAME
-hostname "$HOSTNAME"
-hostname > '/etc/hostname'
-sed -i '/^127\.0\.1\.1 /d' '/etc/hosts'
-idempotent_append "127.0.1.1 $HOSTNAME" '/etc/hosts'
-
-echo ':: Configuring Wi-Fi...'
-read -p 'Please enter your wireless regulatory domain: ("US" for the USA) ' REGDOM
-KERNEL_COMMANDLINE="cfg80211.ieee80211_regdom=$REGDOM"
-unset REGDOM
-apt install -y rfkill
-cat > /etc/udev/rules.d/80-rfkill-wifi.rules <<EOF
-SUBSYSTEM=="rfkill", ATTR{type}=="wlan", ACTION=="add|change", RUN+="/usr/sbin/rfkill block wifi"
-EOF
-
-echo ':: Configuring Wake-On-LAN...'
-cat > /etc/udev/rules.d/99-wol.rules <<EOF
-ACTION=="add", SUBSYSTEM=="net", KERNEL=="en*", RUN+="/usr/sbin/ethtool -s %k wol g"
-ACTION=="add", SUBSYSTEM=="net", KERNEL=="eth*", RUN+="/usr/sbin/ethtool -s %k wol g"
-EOF
+################################################################################
+## CONFIGURE APT
+################################################################################
 
 ## Configure apt
 echo ':: Configuring apt...'
@@ -86,18 +81,81 @@ deb      http://deb.debian.org/debian/                $DEBIAN_VERSION-updates   
 deb-src  http://deb.debian.org/debian/                $DEBIAN_VERSION-updates           main contrib non-free-firmware non-free
 EOF ;;
     2) cat > /etc/apt/sources.list.d/official-package-repositories.list <<EOF
-deb http://mirror.brightridge.com/ubuntuarchive/  $UBUNTU_VERSION            main restricted universe multiverse
-deb http://archive.canonical.com/ubuntu/          $UBUNTU_VERSION            partner
-deb http://mirror.brightridge.com/ubuntuarchive/  $UBUNTU_VERSION-updates    main restricted universe multiverse
-deb http://mirror.brightridge.com/ubuntuarchive/  $UBUNTU_VERSION-backports  main restricted universe multiverse
-deb http://security.ubuntu.com/ubuntu/            $UBUNTU_VERSION-security   main restricted universe multiverse
-EOF ;;
+deb http://archive.ubuntu.com/ubuntu/     $UBUNTU_VERSION            main restricted universe multiverse
+#deb http://archive.canonical.com/ubuntu/ $UBUNTU_VERSION            partner
+deb http://archive.ubuntu.com/ubuntu/     $UBUNTU_VERSION-updates    main restricted universe multiverse
+deb http://archive.ubuntu.com/ubuntu/     $UBUNTU_VERSION-backports  main restricted universe multiverse
+deb http://security.ubuntu.com/ubuntu/    $UBUNTU_VERSION-security   main restricted universe multiverse
+EOF
+    set +e
+    ${EDITOR:-nano} /etc/apt/sources.list.d/*
+    set -e
+    ;;
 esac
+
+## Get our packages up-to-date
+echo ':: Upgrading packages...'
+apt update
+apt full-upgrade -y
+apt install -y unattended-upgrades
+dpkg-reconfigure -plow unattended-upgrades
+
+##########################################################################################
+## FIRMWARE
+##########################################################################################
+
+## Upgrade firmware
+echo ':: Upgrading firmware...'
+apt install -y fwupd
 set +e
-shopt -s nullglob
-${EDITOR:-nano} /etc/apt/sources.list.d/*
-shopt -u nullglob
+fwupdmgr refresh
+fwupdmgr get-updates && fwupdmgr update
 set -e
+
+################################################################################
+## INSTALL FUNDAMENTAL PACKAGES
+################################################################################
+
+## Install build tools
+apt install -y build-essential pkg-config
+
+## Install Linux
+echo ':: Installing Linux...'
+case $DISTRO in
+    1) apt install -y -t "$DEBIAN_VERSION-backports" linux-image-amd64 linux-headers-amd64 dkms ;;
+    2) apt install -y -t "$UBUNTU_VERSION-backports" linux-image-generic linux-headers-generic dkms ;;
+esac
+
+## Install initramfs
+echo ':: Installing initramfs...'
+apt install -y initramfs-tools
+
+## Install important but potentially missing compression algorithms and tooling
+echo ':: Installing compressiony things...'
+apt install -y gzip lz4 lzop unrar unzip zip zstd
+idempotent_append 'lz4' '/etc/initramfs-tools/modules'
+
+## Install systemd
+echo ':: Installing systemd...'
+apt install -y systemd
+
+## Install MAC
+echo ':: Enabling Mandatory Access Control...'
+apt install -y apparmor apparmor-utils apparmor-notify apparmor-profiles apparmor-profiles-extra
+KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE apparmor=1 security=apparmor"
+
+################################################################################
+## INTERACTIVE SYSTEM CONFIGURATION
+################################################################################
+
+## Configure hostname
+echo ':: Configuring hostname...'
+read -p "What unqualified hostname would you like?: " HOSTNAME
+# hostname "$HOSTNAME"
+# hostname > '/etc/hostname'
+hostnamectl set-hostname "$HOSTNAME"
+sed -i '/^127\.0\.1\.1 /d' '/etc/hosts'
+idempotent_append "127.0.1.1 $HOSTNAME" '/etc/hosts'
 
 ## Configure the system
 echo ':: Configuring system...'
@@ -109,11 +167,15 @@ dpkg-reconfigure console-setup
 dpkg-reconfigure keyboard-configuration
 dpkg-reconfigure tzdata
 
+################################################################################
+## USERS
+################################################################################
+
 ## Set up /etc/skel
 echo ':: Creating user configs...'
 apt install -y tmux
 echo 'set -g status-position top' > /etc/skel/.tmux.conf
-idempotent_append 'shopt -q login_shell && command -v tmux && [[ ! -n "$TMUX" ]] && exec tmux' '/etc/skel/.bashrc'
+idempotent_append 'shopt -q login_shell && [[ $- == *i* ]] && command -v tmux >/dev/null && [[ ! -n "$TMUX" ]] && exec tmux' '/etc/skel/.bashrc'
 
 ## Configure users
 echo ':: Configuring users...'
@@ -126,27 +188,58 @@ read -p "Please enter a username for your personal user: " USERNAME
 id "$USERNAME" >/dev/null 2>&1 || adduser "$USERNAME"
 export USERNAME
 
-## Get our packages up-to-date
-echo ':: Upgrading packages...'
-apt update
-apt full-upgrade -y
-apt install -y unattended-upgrades
-dpkg-reconfigure -plow unattended-upgrades
+################################################################################
+## MEMORY MOUNTS
+################################################################################
 
-## Install build tools
-apt install -y build-essential pkg-config
+## Enable swap
+echo ':: Configuring swap...'
+KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE zswap.enabled=1 zswap.max_pool_percent=17 zswap.compressor=lzo" #NOTE: Fractional percents (eg, `12.5`) are not possible.
+apt install -y systemd-zram-generator
+cat > /etc/systemd/zram-generator.conf <<EOF
+[zram0]
+zram-size = "ram * 0.3333333"
+compression-algorithm = "zstd"
+swap-priority = 32767
+#TODO: Specify zstd level.
 
-## Install Linux
-echo ':: Installing Linux...'
-case $DISTRO in
-    1) apt install -y -t "$DEBIAN_VERSION-backports" linux-image-amd64 linux-headers-amd64 dkms ;;
-    2) apt install -y -t "$UBUNTU_VERSION-backports" linux-image-generic linux-headers-generic dkms ;;
-esac
+#WARN: Not worth it: compression DRAMATICALLY slows RAM; more, tmpfs without a limit swaps, meaning zswap + zram swap will catch and compress unused tmpfs data. That means dynamic compression instead of universal compression, and that’s a clearly superior scenario.
+# [zram1]
+# zram-size = "1G"
+# compression-algorithm = "lz4"
+# fs-type = "ext4"
+# fs-create-options = "-E lazy_itable_init=0,lazy_journal_init=0 -m0 -O none,extent,dir_index,extra_isize=256 -T small" #NOTE: Enable `metadata_csum` if you don’t trust your RAM.
+## No point in `lazytime` when the filesystem is in RAM.
+# options = "X-mount.mode=1777,noatime,discard"
+## Yes, this should generate and mount before anything needs it.
+# mount-point = "/tmp"
 
-## Install systemd
-echo ':: Installing systemd...'
-apt install -y systemd
-hostnamectl set-hostname $(hostname) ## Just in case systemd knows of additional places it needs setting.
+#NOTE: /run is mounted as tmpfs extremely early, before generators run; consequently, it is not possible to use zram for it (at least not in *this* way).
+EOF
+systemctl daemon-reload
+systemctl start systemd-zram-setup@zram0
+
+## Configure `/tmp` as tmpfs
+echo ':: Configuring `/tmp`...'
+cp /usr/share/systemd/tmp.mount /etc/systemd/system/
+systemctl enable tmp.mount
+mkdir -p /etc/systemd/system/tmp.mount.d
+cat > /etc/systemd/system/tmp.mount.d/override.conf <<EOF
+[Mount]
+Options=mode=1777,nosuid,nodev,size=5G,noatime
+## 5G is enough space to have 1G free while extracting a 4G archive (the max supported by FAT32). 1G is plenty for normal operation. ## No point in `lazytime` when the filesystem is in RAM.
+EOF
+mkdir -p /etc/systemd/system/console-setup.service.d
+cat > /etc/systemd/system/console-setup.service.d/override.conf <<EOF
+[Unit]
+Requires=tmp.mount
+After=tmp.mount
+EOF #BUG: Resolves an issue where console-setup can happen shortly before tmpfs mounts and accordingly fail when tmpfs effectively deletes /tmp while console-setup is happening.
+systemctl daemon-reload
+
+################################################################################
+## ZFS
+################################################################################
 
 ## Install and configure ZFS
 echo ':: Installing ZFS...'
@@ -166,100 +259,8 @@ systemctl enable zfs-import-cache
 systemctl enable zfs-mount
 systemctl enable zfs-import.target
 
-## Install and configure EFI bootloader
-echo ':: Installing EFI bootloader...'
-mkdir -p /boot/esp
-apt install -y dosfstools mdadm
-read -p 'Run this command outside of chroot and paste the result: `$(lsblk -o uuid "/dev/md/$ENV_NAME_ESP" | tail -n 1)` ' ESP_UUID
-echo "UUID=$ESP_UUID /boot/esp vfat noatime,lazytime,nofail,x-systemd.device-timeout=5s,iocharset=utf8,umask=0022,fmask=0133,dmask=0022 0 0" > '/etc/fstab' #FIXME: `sync` causes writes to never finish?
-unset ESP_UUID
-mount /boot/esp
-apt install -y git
-cd /usr/local/src
-REPO='zfsbootmenu'
-[[ ! -d "$REPO" ]] && git clone "https://github.com/zbm-dev/$REPO.git"
-cd "$REPO"
-cp -r ./etc/zfsbootmenu /etc/
-mkdir -p /etc/zfsbootmenu/generate-zbm.pre.d /etc/zfsbootmenu/generate-zbm.post.d /etc/zfsbootmenu/mkinitcpio.hooks.d
-cat > /etc/zfsbootmenu/config.yaml <<EOF
-## man 5 generate-zbm
-Global:
-  ManageImages: true
-  InitCPIO: false
-  DracutConfDir: /etc/zfsbootmenu/dracut.conf.d
-  InitCPIOConfig: /etc/zfsbootmenu/mkinitcpio.conf
-  InitCPIOHookDirs: [/etc/zfsbootmenu/mkinitcpio.hooks.d]
-  BootMountPoint: /boot/esp
-# Version: %current
-# DracutFlags: []
-# InitCPIOFlags: []
-  PreHooksDir: /etc/zfsbootmenu/generate-zbm.pre.d
-  PostHooksDir: /etc/zfsbootmenu/generate-zbm.post.d
-Kernel:
-  CommandLine: ro quiet loglevel=5 init_on_alloc=0
-# Path: ''
-# Version: ''
-# Prefix: ''
-Components:
-  Enabled: false
-  ImageDir: /boot/esp/EFI/ZBM
-  Versions: 3
-EFI:
-  Enabled: true
-  ImageDir: /boot/esp/EFI/ZBM
-  Versions: 3
-# Stub: /usr/lib/systemd/boot/efi/linuxx64.efi.stub
-# SplashImage: /etc/zfsbootmenu/splash.bmp
-# DeviceTree: ''
-EOF
-cat > /etc/zfsbootmenu/generate-zbm.post.d/99-portablize.sh <<EOF
-#!/bin/sh
-cd /boot/esp/EFI
-mkdir -p BOOT ZBM
-SRC=$(ls -t1 ./ZBM | grep -i '.EFI$' | head -n 1)
-[ -z "$SRC" ] && exit 1
-SRC="ZBM/$SRC"
-DEST='BOOT/BOOTX64.EFI'
-cp -fa "$SRC" "$DEST.new"
-mv -f "$DEST.new" "$DEST"
-EOF
-chmod +x /etc/zfsbootmenu/generate-zbm.post.d/99-portablize.sh
-read -p "Don't let kexec-tools handle reboots by default; it is an unsupported scenario and results in a series of bugs. If you ever want to kexec into a small point-release kernel, explicitly request it. " FOO; unset FOO
-apt install -y bsdextrautils curl dracut-core efibootmgr fzf kexec-tools libsort-versions-perl libboolean-perl libyaml-pp-perl mbuffer systemd-boot-efi
-# apt-mark auto bsdextrautils dracut-core fzf libboolean-perl libsort-versions-perl libyaml-pp-perl mbuffer
-make core dracut
-generate-zbm
-cd "$CWD"
-KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE quiet loglevel=5"
-echo 'WARN: To use SecureBoot, you need to generate a private key, enroll it in your NVRAM, and sign your ZBM image with it.' >&2 #TODO
-
-## Set up ZFS in the initramfs
-echo ':: Configuring the initramfs to support ZFS...'
-KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE init_on_alloc=0" ## `=1` causes major performance issues for ZFS. `=0` used to be the default. The minor and theoretical security improvements are not worth this much of a performance hit, and they only set it to `=1` in the first place because on non-ZFS systems it does not substantially impact performance.
-case $DISTRO in
-    1) apt install -y -t "$DEBIAN_VERSION-backports" zfs-initramfs ;;
-    2) apt install -y -t "$UBUNTU_VERSION-backports" zfs-initramfs ;;
-esac
-KEYDIR=/etc/zfs/keys
-chmod 700 "$KEYDIR"
-KEYFILE="$KEYDIR/$ENV_POOL_NAME_OS.key"
-if [[ ! -f "$KEYFILE" ]]; then
-    touch "$KEYFILE"
-    chmod 600 "$KEYFILE"
-    read -p "A file is about to open; enter your ZFS encryption password into it. This is necessary to prevent double-prompting during boot. Press 'Enter' to continue. " FOO; unset FOO
-    nano "$KEYFILE"
-fi
-zfs set keylocation=file://"$KEYFILE" "$ENV_POOL_NAME_OS"
-echo 'UMASK=0077' > /etc/initramfs-tools/conf.d/umask.conf
-echo "FILES=\"$KEYDIR/*\"" > /etc/initramfs-tools/conf.d/99-zfs-keys.conf
-unset KEYDIR KEYFILE
-
-## Install important but potentially missing compression algorithms and tooling
-echo ':: Installing compressiony things...'
-apt install -y gzip lz4 lzop unrar unzip zip zstd
-idempotent_append 'lz4' '/etc/initramfs-tools/modules'
-
 ## Prettify zpool display
+echo ':: Prettifying zpool display...'
 cat > /etc/zfs/vdev_id.conf <<EOF
 ## ATA HDDs
 alias hdd ata-H*
@@ -284,8 +285,18 @@ alias dev wwn-*
 EOF
 echo 'Make sure to import your pools with `import -d /dev/disk/by-id`! Else, you will fail to import when `/dev/sdX` changes. '
 
+## Configure trim/discard
+echo ':: Scheduling trim...'
+systemctl enable fstrim.timer ## Auto-trims everything in /etc/fstab
+#TODO: Auto-trim zpools, too.
+
+################################################################################
+## MOUNT OPTIONS
+################################################################################
+
 ## Enforce mount options
-## ZFS does not provide properties for all of the mount options it supports (like `lazytime`), so we have to specify it manually when mounting datasets or monkeypatch `zfs` to do it by default.
+echo ':: Changing default mount options...'
+## ZFS does not provide properties for all of the mount options it supports (like `lazytime`; see https://github.com/openzfs/zfs/issues/9843), so we have to specify it manually when mounting datasets or monkeypatch `zfs` to do it by default.
 ## Linux's default mount options include `relatime` and lack `lazytime`, which is suboptimal for performance and longevity. The only way to change the defaults is to monkeypatch `mount`.
 ## A lot of system mounts explicitly declare `relatime` when nothing in them actually uses atimes. These need manual correction.
 BASENAME=remount-options
@@ -349,6 +360,7 @@ cat > "$SCRIPT" <<EOF
 exec /usr/bin/mount -o noatime,lazytime "$@"
 EOF
 chmod 0755 "$SCRIPT"
+## Note to code reviewers: `-o` can be passed multiple times, and later values override prior ones.
 
 SCRIPT=/usr/local/sbin/zfs
 cat > "$SCRIPT" <<EOF
@@ -361,60 +373,106 @@ chmod 0755 "$SCRIPT"
 
 unset BASENAME SCRIPT SERVICE
 
-## Enable swap
-echo ':: Configuring swap...'
-KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE zswap.enabled=1 zswap.max_pool_percent=17 zswap.compressor=lzo" #NOTE: Fractional percents (eg, `12.5`) are not possible.
-apt install -y systemd-zram-generator
-cat > /etc/systemd/zram-generator.conf <<EOF
-[zram0]
-zram-size = "ram * 0.3333333"
-compression-algorithm = "zstd"
-swap-priority = 32767
-#TODO: Specify zstd level.
+################################################################################
+## ESP
+################################################################################
 
-#WARN: Not worth it: compression DRAMATICALLY slows RAM; more, tmpfs without a limit swaps, meaning zswap + zram swap will catch and compress unused tmpfs data. That means dynamic compression instead of universal compression, and that’s a clearly superior scenario.
-# [zram1]
-# zram-size = "1G"
-# compression-algorithm = "lz4"
-# fs-type = "ext4"
-# fs-create-options = "-E lazy_itable_init=0,lazy_journal_init=0 -m0 -O none,extent,dir_index,extra_isize=256 -T small" #NOTE: Enable `metadata_csum` if you don’t trust your RAM.
-## No point in `lazytime` when the filesystem is in RAM.
-# options = "X-mount.mode=1777,noatime,discard"
-## Yes, this should generate and mount before anything needs it.
-# mount-point = "/tmp"
+## Initialize ESP
+echo ':: Initializing ESP...'
+mkdir -p /boot/esp
+apt install -y dosfstools mdadm
+read -p 'Run this command outside of chroot and paste the result: `$(lsblk -o uuid "/dev/md/$ENV_NAME_ESP" | tail -n 1)` ' ESP_UUID
+echo "UUID=$ESP_UUID /boot/esp vfat noatime,lazytime,nofail,x-systemd.device-timeout=5s,iocharset=utf8,umask=0022,fmask=0133,dmask=0022 0 0" > '/etc/fstab' #FIXME: `sync` causes writes to never finish?
+unset ESP_UUID
+mount /boot/esp
 
-#NOTE: /run is mounted as tmpfs extremely early, before generators run; consequently, it is not possible to use zram for it (at least not in *this* way).
+## Install and configure EFI bootloader
+echo ':: Installing EFI bootloader...'
+apt install -y git
+cd /usr/local/src
+REPO='zfsbootmenu'
+[[ ! -d "$REPO" ]] && git clone "https://github.com/zbm-dev/$REPO.git"
+cd "$REPO"
+cp -r ./etc/zfsbootmenu /etc/
+mkdir -p /etc/zfsbootmenu/generate-zbm.pre.d /etc/zfsbootmenu/generate-zbm.post.d /etc/zfsbootmenu/mkinitcpio.hooks.d
+cat > /etc/zfsbootmenu/config.yaml <<EOF
+## man 5 generate-zbm
+Global:
+  ManageImages: true
+  InitCPIO: false
+  DracutConfDir: /etc/zfsbootmenu/dracut.conf.d
+  InitCPIOConfig: /etc/zfsbootmenu/mkinitcpio.conf
+  InitCPIOHookDirs: [/etc/zfsbootmenu/mkinitcpio.hooks.d]
+  BootMountPoint: /boot/esp
+# Version: %current
+# DracutFlags: []
+# InitCPIOFlags: []
+  PreHooksDir: /etc/zfsbootmenu/generate-zbm.pre.d
+  PostHooksDir: /etc/zfsbootmenu/generate-zbm.post.d
+Kernel:
+  CommandLine: ro quiet loglevel=5 init_on_alloc=0
+# Path: ''
+# Version: ''
+# Prefix: ''
+Components:
+  Enabled: false
+  ImageDir: /boot/esp/EFI/ZBM
+  Versions: 3
+EFI:
+  Enabled: true
+  ImageDir: /boot/esp/EFI/ZBM
+  Versions: 3
+# Stub: /usr/lib/systemd/boot/efi/linuxx64.efi.stub
+# SplashImage: /etc/zfsbootmenu/splash.bmp
+# DeviceTree: ''
 EOF
-systemctl daemon-reload
-systemctl start systemd-zram-setup@zram0
-
-## Configure `/tmp` as tmpfs
-echo ':: Configuring `/tmp`...'
-cp /usr/share/systemd/tmp.mount /etc/systemd/system/
-systemctl enable tmp.mount
-mkdir -p /etc/systemd/system/tmp.mount.d
-cat > /etc/systemd/system/tmp.mount.d/override.conf <<EOF
-[Mount]
-Options=mode=1777,nosuid,nodev,size=5G,noatime
-## 5G is enough space to have 1G free while extracting a 4G archive (the max supported by FAT32). 1G is plenty for normal operation. ## No point in `lazytime` when the filesystem is in RAM.
+cat > /etc/zfsbootmenu/generate-zbm.post.d/99-portablize.sh <<EOF
+#!/bin/sh
+cd /boot/esp/EFI
+mkdir -p BOOT ZBM
+SRC=$(ls -t1 ./ZBM | grep -i '.EFI$' | head -n 1)
+[ -z "$SRC" ] && exit 1
+SRC="ZBM/$SRC"
+DEST='BOOT/BOOTX64.EFI'
+cp -fa "$SRC" "$DEST.new"
+mv -f "$DEST.new" "$DEST"
 EOF
-mkdir -p /etc/systemd/system/console-setup.service.d
-cat > /etc/systemd/system/console-setup.service.d/override.conf <<EOF
-[Unit]
-Requires=tmp.mount
-After=tmp.mount
-EOF #BUG: Resolves an issue where console-setup can happen shortly before tmpfs mounts and accordingly fail when tmpfs effectively deletes /tmp while console-setup is happening.
-systemctl daemon-reload
+chmod +x /etc/zfsbootmenu/generate-zbm.post.d/99-portablize.sh
+read -p "Don't let kexec-tools handle reboots by default; it is an unsupported scenario and results in a series of bugs. If you ever want to kexec into a small point-release kernel, explicitly request it. " FOO; unset FOO
+apt install -y bsdextrautils curl dracut-core efibootmgr fzf kexec-tools libsort-versions-perl libboolean-perl libyaml-pp-perl mbuffer systemd-boot-efi
+# apt-mark auto bsdextrautils dracut-core fzf libboolean-perl libsort-versions-perl libyaml-pp-perl mbuffer
+make core dracut
+generate-zbm
+cd "$CWD"
+KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE quiet loglevel=5"
 
-## Configure trim/discard
-echo ':: Scheduling trim...'
-systemctl enable fstrim.timer ## Auto-trims everything in /etc/fstab
-#TODO: Auto-trim zpools, too.
+## Set up ZFS in the initramfs
+echo ':: Configuring the initramfs to support ZFS...'
+KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE init_on_alloc=0" ## `=1` causes major performance issues for ZFS. `=0` used to be the default. The minor and theoretical security improvements are not worth this much of a performance hit, and they only set it to `=1` in the first place because on non-ZFS systems it does not substantially impact performance.
+case $DISTRO in
+    1) apt install -y -t "$DEBIAN_VERSION-backports" zfs-initramfs ;;
+    2) apt install -y -t "$UBUNTU_VERSION-backports" zfs-initramfs ;;
+esac
+KEYDIR=/etc/zfs/keys
+chmod 700 "$KEYDIR"
+KEYFILE="$KEYDIR/$ENV_POOL_NAME_OS.key"
+if [[ ! -f "$KEYFILE" ]]; then
+    touch "$KEYFILE"
+    chmod 600 "$KEYFILE"
+    read -p "A file is about to open; enter your ZFS encryption password into it. This is necessary to prevent double-prompting during boot. Press 'Enter' to continue. " FOO; unset FOO
+    nano "$KEYFILE"
+fi
+zfs set keylocation=file://"$KEYFILE" "$ENV_POOL_NAME_OS"
+echo 'UMASK=0077' > /etc/initramfs-tools/conf.d/umask.conf
+echo "FILES=\"$KEYDIR/*\"" > /etc/initramfs-tools/conf.d/99-zfs-keys.conf
+unset KEYDIR KEYFILE
 
-## Install MAC
-echo ':: Enabling Mandatory Access Control...'
-apt install -y apparmor apparmor-utils apparmor-notify apparmor-profiles apparmor-profiles-extra
-KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE apparmor=1 security=apparmor"
+## Set up SecureBoot
+echo 'WARN: To use SecureBoot, you need to generate a private key, enroll it in your NVRAM, and sign your ZBM image with it.' >&2 #TODO
+
+##########################################################################################
+## PACKAGES
+##########################################################################################
 
 ## Install daemons
 echo ':: Installing daemons...'
@@ -436,18 +494,11 @@ echo ':: Installing firmware, drivers, and tools...'
 ## General firmware
 apt install -y firmware-linux-free firmware-linux-nonfree firmware-misc-nonfree
 ## General firmware tools
-apt install -y fwupd iasl
+apt install -y iasl
 ## General hardware tools
 KVER=$(ls /lib/modules | sort -V | tail -n1) #NOTE: Can't use `uname -r` since that'd be the LiveCD's kernel.
 apt install -y linux-tools-common linux-tools-$KVER i2c-tools ethtool fancontrol lm-sensors lshw net-tools pciutils read-edid smartmontools hdparm tpm2-tools usbutils sysstat iotop dmsetup numactl numatop procps psmisc cgroup-tools mesa-utils clinfo
 sensors-detect --auto
-
-## Upgrade firmware
-echo ':: Upgrading firmware...'
-set +e
-fwupdmgr refresh
-fwupdmgr get-updates && fwupdmgr update
-set -e
 
 ## Install applications
 echo ':: Installing applications...'
@@ -459,22 +510,48 @@ apt install -y cups rsync
 ## Niche applications
 # apt install -y # sanoid
 
-## Disable or (if impossible to disable) adjust various compressions to save CPU (ZFS does compression for us extremely cheaply, and space is very plentiful on the OS drives.)
-echo ':: Tweaking various compression settings...'
-FILE='/etc/initramfs-tools/initramfs.conf'
-cat "$FILE" | sed -r 's/^(COMPRESS)=.*/\1=zstd/' | sed -r 's/^# (COMPRESS_LEVEL)=.*/\1=0/' > "$FILE.new" ## I tested; `zstd-0` beats `lz4-0` at both speed and ratio here.
-mv -f "$FILE.new" "$FILE"
-for FILE in /etc/logrotate.conf /etc/logrotate.d/*; do
-    if grep -Eq '(^|[^#y])compress' "$FILE"; then
-        cat "$FILE" | sed -r 's/(^|[^#y])(compress)/\1#\2/' > "$FILE.new"
-        mv "$FILE.new" "$FILE"
-    fi
-done
-unset FILE
+##########################################################################################
+## NETWORKING
+##########################################################################################
 
-## Reconfigure FSH
-echo ':: Modifying filesystem hierarchy...'
-bash ./configure-filesystem-hierarchy.bash
+echo ':: Configuring networking...'
+
+## Configure WOL
+read -p 'Enter "y" to enable Wake-On-LAN, or "n" to leave it disabled. ' DO_IT
+if [[ "$DO_IT" == 'y' ]]; then
+    cat > /etc/udev/rules.d/99-wol.rules <<EOF
+ACTION=="add", SUBSYSTEM=="net", KERNEL=="en*", RUN+="/usr/sbin/ethtool -s %k wol g"
+ACTION=="add", SUBSYSTEM=="net", KERNEL=="eth*", RUN+="/usr/sbin/ethtool -s %k wol g"
+EOF
+fi; unset DO_IT
+
+## Set up `ssh`
+read -p 'Enter "y" to enable ssh, or "n" to leave it disabled. ' DO_IT
+if [[ "$DO_IT" == 'y' ]]; then
+    apt install -y openssh-server
+    sed -Ei 's/^#?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
+    systemctl enable ssh
+fi; unset DO_IT
+
+echo ':: Configuring Wi-Fi...'
+
+## Configure regulatory domain
+read -p 'Please enter your wireless regulatory domain: ("US" for the USA) ' REGDOM
+KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE cfg80211.ieee80211_regdom=$REGDOM"
+unset REGDOM
+
+## Disable Wi-Fi
+read -p 'Enter "y" to disable Wi-Fi or "n" to leave it untouched. ' DO_IT
+if [[ "$DO_IT" == 'y' ]]; then
+    apt install -y rfkill
+    cat > /etc/udev/rules.d/80-rfkill-wifi.rules <<EOF
+SUBSYSTEM=="rfkill", ATTR{type}=="wlan", ACTION=="add|change", RUN+="/usr/sbin/rfkill block wifi"
+EOF
+fi; unset DO_IT
+
+##########################################################################################
+## THEMING
+##########################################################################################
 
 # ## Better bitmap font
 # #FIXME: It doesn't handle box-drawing characters, and it could be made to handle Powerline characters.
@@ -498,6 +575,68 @@ bash ./configure-filesystem-hierarchy.bash
 # cd "$CWD"
 # unset FILE
 
+##########################################################################################
+## RECONFIGURE FSH
+##########################################################################################
+echo ':: Modifying filesystem hierarchy...'
+
+## `/var/www` needs to be moved to `/srv` so that it is treated the same as other web services.
+mkdir -p /var/www
+if [[ ! -L /var/www && ! -d /srv/www ]]; then
+    mv -f /var/www /srv/www
+    ln -sTv /srv/www /var/www
+fi
+
+## This helps reflect dataset inheritance.
+if [[ ! -L /home/root ]]; then
+    ln -sTv /root /home/root
+fi
+
+# The following files need to be moved to a whitelisted directory and symlinked back.
+# Unfortunately, their associated applications recreate them, meaning that any symlinks would be deleted and replaced.
+#
+# if [[ ! -L /var/lib/apt/extended_states && ! -d /var/lib/apt/states ]]; then
+#     mkdir -p /var/lib/apt/states
+#     mv /var/lib/apt/extended_states /var/lib/apt/states/extended
+#     ln -sTv ./states/extended /var/lib/apt/extended_states
+# fi
+#
+# if [[ ! -L /var/lib/shells.state && ! -d /var/lib/shells ]]; then
+#     mkdir -p /var/lib/shells
+#     mv /var/lib/shells.state /var/lib/shells/state
+#     ln -sTv ./shells/state /var/lib/shells.state
+# fi
+
+## Ensure that certain key directories in `/var` remain tied to system snapshots.
+VARKEEP_DIR='/varlib'
+mkdir -p "$VARKEEP_DIR"
+if [[ -d "$VARKEEP_DIR" ]]; then
+    declare -a VARKEEP_DIRS=('/var/lib/apt' '/var/lib/dkms' '/var/lib/dpkg' '/var/lib/emacsen-common' '/var/lib/sgml-base' '/var/lib/ucf' '/var/lib/xml-core') # '/var/lib/apt/states' '/var/lib/shells'
+    for DIR in "${VARKEEP_DIRS[@]}"; do
+        if [[ -d "$DIR" && ! -L "$DIR" ]]; then
+            mv -f "$DIR" "$VARKEEP_DIR/"
+            ln -sTv "$VARKEEP_DIR/"$(basename "$DIR") "$DIR"
+        fi
+    done
+fi
+
+##########################################################################################
+
+## Disable or (if impossible to disable) adjust various compressions to save CPU (ZFS does compression for us extremely cheaply, and space is very plentiful on the OS drives.)
+echo ':: Tweaking various compression settings...'
+FILE='/etc/initramfs-tools/initramfs.conf'
+cat "$FILE" | sed -r 's/^(COMPRESS)=.*/\1=zstd/' | sed -r 's/^# (COMPRESS_LEVEL)=.*/\1=0/' > "$FILE.new" ## I tested; `zstd-0` beats `lz4-0` at both speed and ratio here.
+mv -f "$FILE.new" "$FILE"
+for FILE in /etc/logrotate.conf /etc/logrotate.d/*; do
+    if grep -Eq '(^|[^#y])compress' "$FILE"; then
+        cat "$FILE" | sed -r 's/(^|[^#y])(compress)/\1#\2/' > "$FILE.new"
+        mv "$FILE.new" "$FILE"
+    fi
+done
+unset FILE
+
+##########################################################################################
+
 ## Limit log size
 mkdir -p /etc/systemd/journald.conf.d
 cat > /etc/systemd/journald.conf.d/max-size.conf <<EOF
@@ -507,10 +646,7 @@ SystemMaxUse=256M
 RuntimeMaxUse=128M
 EOF
 
-## Set up `ssh`
-apt install -y openssh-server
-sed -Ei 's/^#?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
-systemctl enable ssh
+##########################################################################################
 
 ## More configuration
 echo ':: Additional configurations...'
@@ -531,11 +667,15 @@ EOF
 export KERNEL_COMMANDLINE_DIR
 update-initramfs -u
 
+##########################################################################################
+
 ## Wrap up
 echo ':: Creating snapshot...'
 set +e
 zfs snapshot -r "$ENV_POOL_NAME_OS@install-$DISTRO"
 set -e
+
+##########################################################################################
 
 ## Done
 case "$HOSTNAME" in
