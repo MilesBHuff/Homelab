@@ -70,7 +70,7 @@ KERNEL_COMMANDLINE=''
 ## Configure apt
 echo ':: Configuring apt...'
 case $DISTRO in
-    1) cat > /etc/apt/sources.list <<EOF
+    1) cat > /etc/apt/sources.list <<EOF ;;
 deb      http://deb.debian.org/debian/                $DEBIAN_VERSION                   main contrib non-free-firmware non-free
 deb-src  http://deb.debian.org/debian/                $DEBIAN_VERSION                   main contrib non-free-firmware non-free
 
@@ -85,7 +85,7 @@ deb-src  http://security.debian.org/debian-security/  $DEBIAN_VERSION-security  
 
 deb      http://deb.debian.org/debian/                $DEBIAN_VERSION-updates           main contrib non-free-firmware non-free
 deb-src  http://deb.debian.org/debian/                $DEBIAN_VERSION-updates           main contrib non-free-firmware non-free
-EOF ;;
+EOF
     2) cat > /etc/apt/sources.list.d/official-package-repositories.list <<EOF
 deb http://archive.ubuntu.com/ubuntu/     $UBUNTU_VERSION            main restricted universe multiverse
 #deb http://archive.canonical.com/ubuntu/ $UBUNTU_VERSION            partner
@@ -157,7 +157,7 @@ KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE apparmor=1 security=apparmor"
 
 ## Configure hostname
 echo ':: Configuring hostname...'
-read -p "What unqualified hostname would you like?: " HOSTNAME
+read -rp "What unqualified hostname would you like?: " HOSTNAME
 # hostname "$HOSTNAME"
 # hostname > '/etc/hostname'
 hostnamectl set-hostname "$HOSTNAME"
@@ -169,7 +169,7 @@ echo ':: Configuring system...'
 apt install -y locales
 dpkg-reconfigure locales
 apt install -y console-setup
-read -p "Note: 8x16 is considered kinda the standard size. Bold is easiest to read. VGA is probably your best bet. Press 'Enter' to continue. " FOO; unset FOO
+read -rp "Note: 8x16 is considered kinda the standard size. Bold is easiest to read. VGA is probably your best bet. Press 'Enter' to continue. " _; unset _
 dpkg-reconfigure console-setup
 dpkg-reconfigure keyboard-configuration
 dpkg-reconfigure tzdata
@@ -191,7 +191,7 @@ if ! passwd -S root 2>/dev/null | grep -q ' P '; then
     passwd
 fi
 cp -a /etc/skel/. /root/
-read -p "Please enter a username for your personal user: " USERNAME
+read -rp "Please enter a username for your personal user: " USERNAME
 id "$USERNAME" >/dev/null 2>&1 || adduser "$USERNAME"
 export USERNAME
 
@@ -261,11 +261,11 @@ Options=mode=1777,nosuid,nodev,size=5G,noatime
 ## 5G is enough space to have 1G free while extracting a 4G archive (the max supported by FAT32). 1G is plenty for normal operation. ## No point in `lazytime` when the filesystem is in RAM.
 EOF
 mkdir -p /etc/systemd/system/console-setup.service.d
-cat > /etc/systemd/system/console-setup.service.d/override.conf <<'EOF'
+cat > /etc/systemd/system/console-setup.service.d/override.conf <<'EOF' #BUG: Resolves an issue where console-setup can happen shortly before tmpfs mounts and accordingly fail when tmpfs effectively deletes /tmp while console-setup is happening.
 [Unit]
 # Requires=tmp.mount
 After=tmp.mount
-EOF #BUG: Resolves an issue where console-setup can happen shortly before tmpfs mounts and accordingly fail when tmpfs effectively deletes /tmp while console-setup is happening.
+EOF
 systemctl daemon-reload
 
 ################################################################################
@@ -343,7 +343,6 @@ WantedBy=timers.target
 EOF
 systemctl enable zfstrim.timer
 
-
 ################################################################################
 ## MOUNT OPTIONS
 ################################################################################
@@ -384,7 +383,7 @@ WantedBy=multi-user.target
 EOF
 systemctl enable "$SERVICE"
 
-cat > "$SCRIPT" <<'EOF'
+cat > "$SCRIPT" <<'EOF'; chmod +x "$SCRIPT"
 #!/bin/sh
 AWK_SCRIPT='{ print $2, $4 }'
 [ "$1" = 'mount' ] && AWK_SCRIPT='$3!="zfs" '"$AWK_SCRIPT" ||\
@@ -405,22 +404,22 @@ awk "$AWK_SCRIPT" /proc/self/mounts | while read -r MOUNT_PATH MOUNT_OPTS; do
     fi
 done
 exit 0
-EOF; chmod +x "$SCRIPT"
+EOF
 
 SCRIPT=/usr/local/sbin/mount
-cat > "$SCRIPT" <<'EOF'
+cat > "$SCRIPT" <<'EOF'; chmod +x "$SCRIPT"
 #!/bin/sh
 exec /usr/bin/mount -o noatime,lazytime "$@"
-EOF; chmod +x "$SCRIPT"
+EOF
 ## Note to code reviewers: `-o` can be passed multiple times, and later values override prior ones.
 
 SCRIPT=/usr/local/sbin/zfs
-cat > "$SCRIPT" <<'EOF'
+cat > "$SCRIPT" <<'EOF'; chmod +x "$SCRIPT"
 #!/bin/sh
 [ "$1" != mount ] && exec /usr/sbin/zfs "$@"
 shift
 exec /usr/sbin/zfs mount -o lazytime "$@"
-EOF; chmod +x "$SCRIPT"
+EOF
 
 unset BASENAME SCRIPT SERVICE
 
@@ -433,7 +432,7 @@ echo ':: Initializing ESP...'
 ESP_DIR='/boot/esp'
 mkdir -p "$ESP_DIR"
 apt install -y dosfstools mdadm
-read -p 'Run this command outside of chroot and paste the result: `$(lsblk -o uuid "/dev/md/$ENV_NAME_ESP" | tail -n 1)` ' ESP_UUID
+read -rp 'Run this command outside of chroot and paste the result: `$(lsblk -o uuid "/dev/md/$ENV_NAME_ESP" | tail -n 1)` ' ESP_UUID
 echo "UUID=$ESP_UUID $ESP_DIR vfat noatime,lazytime,nofail,x-systemd.device-timeout=5s,iocharset=utf8,umask=0022,fmask=0133,dmask=0022 0 0" > '/etc/fstab' #NOTE: fstab doesn't exist before this, so overwriting is fine. #FIXME: For some reason, `sync` causes writes to never finish? I've removed it for the time-being.
 unset ESP_UUID
 mount "$ESP_DIR"
@@ -480,7 +479,7 @@ EFI:
 # SplashImage: /etc/zfsbootmenu/splash.bmp
 # DeviceTree: ''
 EOF
-cat > /etc/zfsbootmenu/generate-zbm.post.d/99-portablize.sh <<EOF
+cat > /etc/zfsbootmenu/generate-zbm.post.d/99-portablize.sh <<EOF ; chmod +x '/etc/zfsbootmenu/generate-zbm.post.d/99-portablize.sh'
 #!/bin/sh
 cd "$ESP_DIR/EFI"
 mkdir -p BOOT ZBM
@@ -490,8 +489,8 @@ SRC="ZBM/\$SRC"
 DEST='BOOT/BOOTX64.EFI'
 cp -fa "\$SRC" "\$DEST.new"
 mv -f "\$DEST.new" "\$DEST"
-EOF; chmod +x /etc/zfsbootmenu/generate-zbm.post.d/99-portablize.sh
-read -p "Don't let kexec-tools handle reboots by default; it is an unsupported scenario and results in a series of bugs. If you ever want to kexec into a small point-release kernel, explicitly request it. " FOO; unset FOO
+EOF
+read -rp "Don't let kexec-tools handle reboots by default; it is an unsupported scenario and results in a series of bugs. If you ever want to kexec into a small point-release kernel, explicitly request it. " _; unset _
 apt install -y bsdextrautils curl dracut-core efibootmgr fzf kexec-tools libsort-versions-perl libboolean-perl libyaml-pp-perl mbuffer systemd-boot-efi
 # apt-mark auto bsdextrautils dracut-core fzf libboolean-perl libsort-versions-perl libyaml-pp-perl mbuffer
 make core dracut
@@ -510,7 +509,7 @@ install -m 700 -d "$KEYDIR"
 KEYFILE="$KEYDIR/$ENV_POOL_NAME_OS.key"
 if [[ ! -f "$KEYFILE" ]]; then
     touch_chmod "$KEYFILE" 600
-    read -p "A file is about to open; enter your ZFS encryption password into it. This is necessary to prevent double-prompting during boot. Press 'Enter' to continue. " FOO; unset FOO
+    read -rp "A file is about to open; enter your ZFS encryption password into it. This is necessary to prevent double-prompting during boot. Press 'Enter' to continue. " _; unset _
     nano "$KEYFILE"
 fi
 zfs set keylocation=file://"$KEYFILE" "$ENV_POOL_NAME_OS"
@@ -520,7 +519,7 @@ unset KEYDIR KEYFILE
 
 ## Set up SecureBoot
 SBDIR='/etc/secureboot'
-if [[ efi-readvar -v PK | grep -q 'No PK present' ]]; then
+if efi-readvar -v PK | grep -q 'No PK present'; then
 
     ## Create SB keys
     echo ':: Generating SecureBoot keys...'
@@ -538,7 +537,7 @@ if [[ efi-readvar -v PK | grep -q 'No PK present' ]]; then
         *) exit 10
     esac
     declare -a CERTS=('PK' 'KEK' 'db')
-    for CERT in ${CERTS[@]}; do
+    for CERT in "${CERTS[@]}"; do
         uuidgen > "uuid/$CERT.uuid"
         openssl req -new -x509 "${ALG_PARAMS[@]}" -sha256 -nodes -days $TTL -keyout "key/$CERT.key"  -out "crt/$CERT.crt"  -subj "/CN=$CERT/"
         chmod 0600 "key/$CERT.key"
@@ -554,7 +553,7 @@ if [[ efi-readvar -v PK | grep -q 'No PK present' ]]; then
     ## Enroll SB keys
     echo ':: Enrolling SecureBoot keys...'
     test -d /sys/firmware/efi && echo "UEFI OK" || echo "UEFI NOT OKAY"
-    for CERT in ${CERTS[@]}; do
+    for CERT in "${CERTS[@]}"; do
         efi-updatevar -f "esl/$CERT.esl" "$CERT"
         efi-readvar -v "$CERT"
     done
@@ -574,13 +573,13 @@ echo ':: Configuring DKMS for SecureBoot...'
 ## Accordingly, in this situation, there is no meaningful benefit to enforcing module signatures.
 ## But we might as well do so anyway.
 KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE module.sig_enforce=1"
-cat > /usr/local/sbin/dkms-sign-file <<'EOF'
+cat > /usr/local/sbin/dkms-sign-file <<'EOF'; chmod +x '/usr/local/sbin/dkms-sign-file'
 #!/bin/sh
 set -euo pipefail
 SIGN_FILE=$(ls -1 /usr/lib/linux-kbuild-*/scripts/sign-file 2>/dev/null | sort -V | tail -n 1)
 [ -x "$SIGN_FILE" ] || exit 1
 exec "$SIGN_FILE" "$@"
-EOF; chmod +x /usr/local/sbin/dkms-sign-file
+EOF
 FWCONF='/etc/dkms/framework.conf'
 idempotent_append 'sign_tool="/usr/local/sbin/dkms-sign-file"' "$FWCONF"
 idempotent_append "private_key=\"$SBDIR/key/db.key\"" "$FWCONF"
@@ -591,20 +590,20 @@ modinfo zfs | grep -E 'signer|sig_key|sig_hashalgo'
 
 ## Make ZBM work with SecureBoot
 echo ':: Configuring ZBM for SecureBoot...'
-cat > /etc/zfsbootmenu/generate-zbm.post.d/98-sign-efi.sh <<EOF
+cat > /etc/zfsbootmenu/generate-zbm.post.d/98-sign-efi.sh <<EOF ; chmod +x '/etc/zfsbootmenu/generate-zbm.post.d/98-sign-efi.sh'
 #!/bin/sh
 set -e
 KEY_FILE=$SBDIR/key/db.key
 CRT_FILE=$SBDIR/crt/db.crt
 EFI_DIR=$ZBM_EFI_DIR
 [ -s "\$KEY_FILE" -a -s "\$CRT_FILE" ] || exit 1
-openssl pkey -in "$KEY_FILE" -check -noout >/dev/null 2>&1 || exit 2
+openssl pkey -in "\$KEY_FILE" -check -noout >/dev/null 2>&1 || exit 2
 for EFI_FILE in "\$EFI_DIR"/*.EFI; do
     [ -s "\$EFI_FILE" ] || continue
     sbsign --output "\$EFI_FILE.signed" --key "\$KEY_FILE" --cert "\$CRT_FILE" "\$EFI_FILE" &&\\
     mv -f "\$EFI_FILE.signed" "\$EFI_FILE"
 done
-EOF; chmod +x /etc/zfsbootmenu/generate-zbm.post.d/98-sign-efi.sh
+EOF
 generate-zbm
 sbverify --list /boot/esp/EFI/ZBM/*.EFI
 sbverify --list /boot/esp/EFI/BOOT/BOOTX64.EFI
@@ -636,7 +635,7 @@ apt install -y firmware-linux-free firmware-linux-nonfree firmware-misc-nonfree
 apt install -y iasl
 ## General hardware tools
 KVER=$(ls /lib/modules | sort -V | tail -n1) #NOTE: Can't use `uname -r` since that'd be the LiveCD's kernel.
-apt install -y linux-tools-common linux-tools-$KVER i2c-tools ethtool fancontrol lm-sensors lshw net-tools pciutils read-edid smartmontools hdparm tpm2-tools usbutils sysstat iotop dmsetup numactl numatop procps psmisc cgroup-tools mesa-utils clinfo
+apt install -y linux-tools-common "linux-tools-$KVER" i2c-tools ethtool fancontrol lm-sensors lshw net-tools pciutils read-edid smartmontools hdparm tpm2-tools usbutils sysstat iotop dmsetup numactl numatop procps psmisc cgroup-tools mesa-utils clinfo
 unset KVER
 sensors-detect --auto
 
@@ -657,7 +656,7 @@ apt install -y cups rsync
 echo ':: Configuring networking...'
 
 ## Configure WOL
-read -p 'Enter "y" to enable Wake-On-LAN, or "n" to leave it disabled. ' DO_IT
+read -rp 'Enter "y" to enable Wake-On-LAN, or "n" to leave it disabled. ' DO_IT
 if [[ "$DO_IT" == 'y' ]]; then
     cat > /etc/udev/rules.d/99-wol.rules <<'EOF'
 ACTION=="add", SUBSYSTEM=="net", KERNEL=="en*", RUN+="/usr/sbin/ethtool -s %k wol g"
@@ -666,7 +665,7 @@ EOF
 fi; unset DO_IT
 
 ## Set up `ssh`
-read -p 'Enter "y" to enable ssh, or "n" to leave it disabled. ' DO_IT
+read -rp 'Enter "y" to enable ssh, or "n" to leave it disabled. ' DO_IT
 if [[ "$DO_IT" == 'y' ]]; then
     apt install -y openssh-server
     sed -Ei 's/^#?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
@@ -676,12 +675,12 @@ fi; unset DO_IT
 echo ':: Configuring Wi-Fi...'
 
 ## Configure regulatory domain
-read -p 'Please enter your wireless regulatory domain: ("US" for the USA) ' REGDOM
+read -rp 'Please enter your wireless regulatory domain: ("US" for the USA) ' REGDOM
 KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE cfg80211.ieee80211_regdom=$REGDOM"
 unset REGDOM
 
 ## Disable Wi-Fi
-read -p 'Enter "y" to disable Wi-Fi or "n" to leave it untouched. ' DO_IT
+read -rp 'Enter "y" to disable Wi-Fi or "n" to leave it untouched. ' DO_IT
 if [[ "$DO_IT" == 'y' ]]; then
     apt install -y rfkill
     cat > /etc/udev/rules.d/80-rfkill-wifi.rules <<'EOF'
@@ -755,7 +754,7 @@ if [[ -d "$VARKEEP_DIR" ]]; then
     for DIR in "${VARKEEP_DIRS[@]}"; do
         if [[ -d "$DIR" && ! -L "$DIR" ]]; then
             mv -f "$DIR" "$VARKEEP_DIR/"
-            ln -sTv "$VARKEEP_DIR/"$(basename "$DIR") "$DIR"
+            ln -sTv "$VARKEEP_DIR/$(basename "$DIR")" "$DIR"
         fi
     done
 fi

@@ -8,7 +8,6 @@ function helptext {
 set -euo pipefail
 
 ## Get environment
-CWD=$(pwd)
 ENV_FILE='../../env.sh'
 if [[ -f "$ENV_FILE" ]]; then
     source "$ENV_FILE"

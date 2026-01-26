@@ -28,7 +28,7 @@ else
 fi
 if [[
     -z "$ENV_NAME_ESP" ||\
-    -z "$ENV_NAME_OS" ||\
+    -z "$ENV_NAME_OS"
 ]]; then
     echo "ERROR: Missing variables in '$ENV_FILE'!" >&2
     exit 3

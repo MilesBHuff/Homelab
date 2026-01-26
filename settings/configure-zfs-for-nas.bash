@@ -12,7 +12,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 ## Get environment variables
-ENV_FILE='../env.sh'; if [[ -f "$ENV_FILE" ]]; then source "$ENV_FILE"; else echo "ERROR: Missing '$ENV_FILE'."; exit -1; fi
+ENV_FILE='../env.sh'; if [[ -f "$ENV_FILE" ]]; then source "$ENV_FILE"; else echo "ERROR: Missing '$ENV_FILE'."; exit 2; fi
 if [[ \
     -z "$ENV_SECONDS_DATA_LOSS_ACCEPTABLE" ||\
     -z "$ENV_SPEED_MBPS_MAX_SLOWEST_HDD" ||\
@@ -39,12 +39,12 @@ chmod 644 "$FILE"
 echo "options zfs             zfs_vdev_max_active=32" >> "$FILE" #DEFAULT: 1000 (basically uncapped)
 
 ## Min queue depths per category (I can't fault most of these, but the sync categories are much higher than they need to be to accomplish the same end per the algorithm used.)
-echo "options zfs   zfs_vdev_sync_read_min_active=5" >> "$FILE" #DEFAULT:   10
-echo "options zfs  zfs_vdev_sync_write_min_active=5" >> "$FILE" #DEFAULT:   10
-echo "options zfs  zfs_vdev_async_read_min_active=2" >> "$FILE" #DEFAULT:    2
-echo "options zfs zfs_vdev_async_write_min_active=1" >> "$FILE" #DEFAULT:    1
-echo "options zfs       zfs_vdev_scrub_min_active=1" >> "$FILE" #DEFAULT:    1
-##                                               =14            #DEFAULT:  =24
+echo "options zfs   zfs_vdev_sync_read_min_active=5"  >> "$FILE" #DEFAULT:   10
+echo "options zfs  zfs_vdev_sync_write_min_active=5"  >> "$FILE" #DEFAULT:   10
+echo "options zfs  zfs_vdev_async_read_min_active=2"  >> "$FILE" #DEFAULT:    2
+echo "options zfs zfs_vdev_async_write_min_active=1"  >> "$FILE" #DEFAULT:    1
+echo "options zfs       zfs_vdev_scrub_min_active=1"  >> "$FILE" #DEFAULT:    1
+##                                               =14             #DEFAULT:  =24
 
 ## Max queue depths per category
 ## The highest sensible value for any of these is probably the CPU core count (in my case, 24 after SMT), or the max quese depth (32), whichever is lower, because any higher would put multiple of the same kind of I/O thread on the same core, which is counterproductive, or because there would be more items to queue than the queue is large.
@@ -64,7 +64,7 @@ function apply-setting {
     COMMAND="echo '$1' > '$2'"
     echo "$COMMAND"
     eval "$COMMAND"
-    [[ ! $? = 0 ]] && echo "$0: current value: "$(cat "$2") >&2
+    [[ ! $? = 0 ]] && echo "$0: current value: $(cat "$2")" >&2
 }
 
 #TODO: Make persistent via udev, so that it will automatically re-apply whenever devices are inserted/removed.
@@ -103,7 +103,7 @@ for DEV in /sys/block/sd* /sys/block/nvme*n*; do
 
         SETTING_PATH="$DEV/queue/optimal_io_size"
         if [[ $(cat "$SETTING_PATH") -eq 0 ]]; then ## Only set if it wasn't set automatically.
-            SETTING_NEW=$(($SETTING_NEW * 1024))
+            SETTING_NEW=$((SETTING_NEW * 1024))
             apply-setting "$SETTING_NEW" "$SETTING_PATH"
         fi
     fi
@@ -120,8 +120,8 @@ echo "options zfs zfs_txg_timeout=$ENV_SECONDS_DATA_LOSS_ACCEPTABLE" >> "$FILE"
 #echo "options zfs zfs_dirty_data_max=$(($ENV_SECONDS_DATA_LOSS_ACCEPTABLE * ($ENV_SPEED_MBPS_MAX_SLOWEST_HDD * (1024**2))))" >> "$FILE" ## Sanity check: Default is 4294967296 (4GiB) #NOTE: This is already auto-tuned every few seconds to accomplish the same goal.
 #echo "options zfs zfs_dirty_data_max_max=$(($ENV_SECONDS_DATA_LOSS_ACCEPTABLE * ($ENV_SPEED_MBPS_MAX_THEORETICAL_HDD * (1024**2))))" >> "$FILE" ## Sanity check: Default is 4294967296 (4GiB) ## This is necessary to avoid a situation where you have more in your TXGs than your drives can physically eat in your timeout. There is no reason to allow this. #NOTE: This can only be configured at module load.
 ## L2ARC Throttling
-echo "options zfs l2arc_write_max=$(($ENV_DEVICES_IN_L2ARC * (($ENV_ENDURANCE_L2ARC * (1024**4)) / ($ENV_MTBF_TARGET_L2ARC * (3652425 / 10000) * 24 * 60 * 60))))" >> "$FILE" ## Sets the L2ARC feed rate to the value that kills the L2ARC device at the appointed time. The default is 8M; this sets it to 2M on a consumer NVMe or 87M on an enterprise one.
-echo "options zfs l2arc_write_boost=$(($ENV_DEVICES_IN_L2ARC * (($ENV_SPEED_L2ARC * (1024**2)) / 2)))" >> "$FILE" ## Sets the temporary fill rate of L2ARC to half its speed.
+echo "options zfs l2arc_write_max=$((ENV_DEVICES_IN_L2ARC * ((ENV_ENDURANCE_L2ARC * (1024**4)) / (ENV_MTBF_TARGET_L2ARC * (3652425 / 10000) * 24 * 60 * 60))))" >> "$FILE" ## Sets the L2ARC feed rate to the value that kills the L2ARC device at the appointed time. The default is 8M; this sets it to 2M on a consumer NVMe or 87M on an enterprise one.
+echo "options zfs l2arc_write_boost=$((ENV_DEVICES_IN_L2ARC * ((ENV_SPEED_L2ARC * (1024**2)) / 2)))" >> "$FILE" ## Sets the temporary fill rate of L2ARC to half its speed.
 ## Limits (no direct effects)
 echo "options zfs zfs_max_recordsize=$((16 * (1024**2)))" >> "$FILE" ## Allows setting 16M recordsizes
 
@@ -130,7 +130,7 @@ echo "options zfs zfs_max_recordsize=$((16 * (1024**2)))" >> "$FILE" ## Allows s
 #############
 
 ## Load written configurations
-while read LINE; do
+while read -r LINE; do
     COMMAND=$(echo "$LINE" | sed 's/^options zfs \+/\/sys\/module\/zfs\/parameters\//' | sed 's/^\(.*\)=\(.*\)$/echo \2 > \1/')
     echo "$COMMAND"
     eval "$COMMAND"

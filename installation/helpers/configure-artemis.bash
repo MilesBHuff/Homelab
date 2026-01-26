@@ -14,7 +14,7 @@ KERNEL_COMMANDLINE="$(cat "$KERNEL_COMMANDLINE_DIR/commandline.txt" | xargs)"
 ## Configure network
 echo ':: Configuring network...'
 ip addr show
-read -p "Copy the interface name you want to use, and paste it here; then press 'Enter': " INTERFACE_NAME #TODO: Automate this.
+read -rp "Copy the interface name you want to use, and paste it here; then press 'Enter': " INTERFACE_NAME #TODO: Automate this.
 cat > "/etc/network/interfaces.d/$INTERFACE_NAME.conf" <<EOF
 auto $INTERFACE_NAME
 iface $INTERFACE_NAME inet dhcp
@@ -49,17 +49,17 @@ make -f Makefile.linux
 make -f Makefile.linux install
 systemctl enable infnoise
 mkdir -p /etc/systemd/system/infnoise.service.d
-cat > /etc/systemd/system/infnoise.service.d/override.conf <<EOF
+cat > /etc/systemd/system/infnoise.service.d/override.conf <<'EOF' ## The latest code does not utilize all of the arguments needed to properly utilize the TRNG with modern Linux kernels, so we have to write it out ourselves.
 [Service]
 ExecStart=
 ExecStart=/usr/local/sbin/infnoise --daemon --pidfile=/var/run/infnoise.pid --dev-random --feed-frequency=30 --reseed-crng
-EOF ## The latest code does not utilize all of the arguments needed to properly utilize the TRNG with modern Linux kernels, so we have to write it out ourselves.
+EOF
 systemctl daemon-reload
 # systemctl start infnoise ## Shouldn't start/stop from chroot.
 
 ## Configure CPU features
 KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE amd_iommu=on" ## Leaving `iommu=pt` off for security.
-cat > /etc/modprobe.d/kvm-amd.conf <<EOF
+cat > /etc/modprobe.d/kvm-amd.conf <<'EOF'
 options kvm-amd nested=1
 EOF
 
