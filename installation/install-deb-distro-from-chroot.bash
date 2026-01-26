@@ -134,6 +134,7 @@ apt install -y initramfs-tools
 echo ':: Installing compressiony things...'
 apt install -y gzip lz4 lzop unrar unzip zip zstd
 idempotent_append 'lz4' '/etc/initramfs-tools/modules'
+idempotent_append 'lz4_compress' '/etc/initramfs-tools/modules'
 
 ## Install systemd
 echo ':: Installing systemd...'
@@ -208,7 +209,7 @@ echo ':: Configuring swap...'
 ## We need to leave enough free RAM to where the system does not experience memory pressure (which becomes a serious problem around *roughly* 80% utilization).
 ## 50% is about the highest reasonable for zswap + zram, since that allows 30% for normal system use when factoring that the last 20% are pressured. (Of course, the exact percents that make sense do depend somewhat on absolute system memory and idle workload.)
 ## With 50% dedication, a 1:2 ratio of zswap:zram keeps us close to the default values for each. That's 16.67% for zswap, and 33.33% for the zram.
-KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE zswap.enabled=1 zswap.max_pool_percent=17 zswap.compressor=lzo" #NOTE: Fractional percents (eg, `12.5`) are not possible.
+KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE zswap.enabled=1 zswap.max_pool_percent=17 zswap.compressor=lz4" #NOTE: Fractional percents (eg, `12.5`) are not possible.
 apt install -y systemd-zram-generator
 cat > /etc/systemd/zram-generator.conf <<EOF
 ## zram swap
