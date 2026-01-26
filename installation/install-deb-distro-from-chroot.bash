@@ -24,10 +24,6 @@ function idempotent_append {
     [[ ! -f "$2" ]] && touch "$2"
     grep -Fqx -- "$1" "$2" || printf '%s\n' "$1" >> "$2"
 }
-function mkdir_chmod {
-    mkdir -p "$1"
-    chmod "$2" "$1"
-}
 function touch_chmod {
     touch "$1"
     chmod "$2" "$1"
@@ -503,7 +499,7 @@ case $DISTRO in
     2) apt install -y -t "$UBUNTU_VERSION-backports" zfs-initramfs ;;
 esac
 KEYDIR=/etc/zfs/keys
-mkdir_chmod "$KEYDIR" 700
+install -m 700 -d "$KEYDIR"
 KEYFILE="$KEYDIR/$ENV_POOL_NAME_OS.key"
 if [[ ! -f "$KEYFILE" ]]; then
     touch_chmod "$KEYFILE" 600
