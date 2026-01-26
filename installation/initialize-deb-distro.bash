@@ -7,7 +7,7 @@ function helptext {
     echo 'It also assumes that you are connected to the Internet.'
 }
 ## Special thanks to https://openzfs.github.io/openzfs-docs/Getting%20Started/Debian/Debian%20Bookworm%20Root%20on%20ZFS.html
-## My thanks to ChatGPT (not as the author of this code (that's me), but for helping with my endless questions and providing advice)
+## Special thanks to ChatGPT for helping with my endless questions.
 set -euo pipefail
 
 ## Get environment

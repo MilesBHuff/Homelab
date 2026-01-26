@@ -5,7 +5,7 @@ function helptext {
     echo 'This is a one-shot script that finishes setting up Artemis (using Debian) in a chroot.'
     echo 'Artemis is a NAS and home server running on a custom-built computer.'
 }
-## My thanks to ChatGPT (not as the author of this code (that's me), but for helping with my endless questions and providing advice)
+## Special thanks to ChatGPT for helping with my endless questions.
 set -euo pipefail
 
 ## Variables

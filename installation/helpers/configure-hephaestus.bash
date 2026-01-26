@@ -4,7 +4,7 @@ function helptext {
     echo
     echo 'This one-shot script configures Ubuntu Server for AI inference on a Framework Desktop.'
 }
-## My thanks to ChatGPT (not as the author of this code (that's me), but for helping with my endless questions and providing advice)
+## Special thanks to ChatGPT for helping with my endless questions.
 set -euo pipefail
 
 ## Get environment
