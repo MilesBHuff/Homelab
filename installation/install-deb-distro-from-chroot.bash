@@ -10,6 +10,8 @@ function helptext {
     echo
     echo 'This is a one-shot script that finishes setting up Debian or Ubuntu in a chroot.'
     echo 'WARN: Although this is intended as a one-shot script, it *should* be more-or-less idempotent; just try to maintain consistent user responses between runs.'
+    echo
+    echo 'You should have SecureBoot enabled, in Setup Mode (PK cleared), and not enforcing.'
 }
 ## Special thanks to https://openzfs.github.io/openzfs-docs/Getting%20Started/Debian/Debian%20Bookworm%20Root%20on%20ZFS.html
 ## My thanks to ChatGPT (not as the author of this code (that's me), but for helping with my endless questions and providing advice)
@@ -426,15 +428,16 @@ unset BASENAME SCRIPT SERVICE
 
 ## Initialize ESP
 echo ':: Initializing ESP...'
-mkdir -p /boot/esp
+ESP_DIR='/boot/esp'
+mkdir -p "$ESP_DIR"
 apt install -y dosfstools mdadm
 read -p 'Run this command outside of chroot and paste the result: `$(lsblk -o uuid "/dev/md/$ENV_NAME_ESP" | tail -n 1)` ' ESP_UUID
-echo "UUID=$ESP_UUID /boot/esp vfat noatime,lazytime,nofail,x-systemd.device-timeout=5s,iocharset=utf8,umask=0022,fmask=0133,dmask=0022 0 0" > '/etc/fstab' #FIXME: `sync` causes writes to never finish?
+echo "UUID=$ESP_UUID $ESP_DIR vfat noatime,lazytime,nofail,x-systemd.device-timeout=5s,iocharset=utf8,umask=0022,fmask=0133,dmask=0022 0 0" > '/etc/fstab' #NOTE: fstab doesn't exist before this, so overwriting is fine. #FIXME: For some reason, `sync` causes writes to never finish? I've removed it for the time-being.
 unset ESP_UUID
-mount /boot/esp
+mount "$ESP_DIR"
 
-## Install and configure EFI bootloader
-echo ':: Installing EFI bootloader...'
+## Create EFI bootloader
+echo ':: Creating EFI bootloader...'
 apt install -y git
 cd /usr/local/src
 REPO='zfsbootmenu'
@@ -442,7 +445,8 @@ REPO='zfsbootmenu'
 cd "$REPO"
 cp -r ./etc/zfsbootmenu /etc/
 mkdir -p /etc/zfsbootmenu/generate-zbm.pre.d /etc/zfsbootmenu/generate-zbm.post.d /etc/zfsbootmenu/mkinitcpio.hooks.d
-cat > /etc/zfsbootmenu/config.yaml <<'EOF'
+ZBM_EFI_DIR="$ESP_DIR/EFI/ZBM"
+cat > /etc/zfsbootmenu/config.yaml <<EOF
 ## man 5 generate-zbm
 Global:
   ManageImages: true
@@ -450,7 +454,7 @@ Global:
   DracutConfDir: /etc/zfsbootmenu/dracut.conf.d
   InitCPIOConfig: /etc/zfsbootmenu/mkinitcpio.conf
   InitCPIOHookDirs: [/etc/zfsbootmenu/mkinitcpio.hooks.d]
-  BootMountPoint: /boot/esp
+  BootMountPoint: $ESP_DIR
 # Version: %current
 # DracutFlags: []
 # InitCPIOFlags: []
@@ -463,19 +467,19 @@ Kernel:
 # Prefix: ''
 Components:
   Enabled: false
-  ImageDir: /boot/esp/EFI/ZBM
+  ImageDir: $ZBM_EFI_DIR
   Versions: 3
 EFI:
   Enabled: true
-  ImageDir: /boot/esp/EFI/ZBM
+  ImageDir: $ZBM_EFI_DIR
   Versions: 3
 # Stub: /usr/lib/systemd/boot/efi/linuxx64.efi.stub
 # SplashImage: /etc/zfsbootmenu/splash.bmp
 # DeviceTree: ''
 EOF
-cat > /etc/zfsbootmenu/generate-zbm.post.d/99-portablize.sh <<'EOF'
+cat > /etc/zfsbootmenu/generate-zbm.post.d/99-portablize.sh <<EOF
 #!/bin/sh
-cd /boot/esp/EFI
+cd "$ESP_DIR/EFI"
 mkdir -p BOOT ZBM
 SRC=$(ls -t1 ./ZBM | grep -i '.EFI$' | head -n 1)
 [ -z "$SRC" ] && exit 1
@@ -488,7 +492,6 @@ read -p "Don't let kexec-tools handle reboots by default; it is an unsupported s
 apt install -y bsdextrautils curl dracut-core efibootmgr fzf kexec-tools libsort-versions-perl libboolean-perl libyaml-pp-perl mbuffer systemd-boot-efi
 # apt-mark auto bsdextrautils dracut-core fzf libboolean-perl libsort-versions-perl libyaml-pp-perl mbuffer
 make core dracut
-generate-zbm
 cd "$CWD"
 KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE quiet loglevel=5"
 
@@ -513,7 +516,93 @@ echo "FILES=\"$KEYDIR/*\"" > /etc/initramfs-tools/conf.d/99-zfs-keys.conf
 unset KEYDIR KEYFILE
 
 ## Set up SecureBoot
-echo 'WARN: To use SecureBoot, you need to generate a private key, enroll it in your NVRAM, and sign your ZBM image with it.' >&2 #TODO
+if [[ efi-readvar -v PK | grep -q 'No PK present' ]]; then
+
+    ## Create SB keys
+    echo ':: Generating SecureBoot keys...'
+    SBDIR='/etc/secureboot'
+    install -m 755 -d "$SBDIR"
+    cd "$SBDIR"
+    install -m 755 -d 'auth' 'crt' 'esl' 'uuid'
+    install -m 700 -d 'key'
+    apt install -y sbsigntool efitools openssl
+    declare -i TTL=3650
+    ALG_CLASS='rsa'
+    declare -a ALG_PARAMS=()
+    case "$ALG_CLASS" in
+        rsa)  ALG_PARAMS=('-newkey' 'rsa:3072') ;; ## RSA-3072 is comparable to 128 symmetrical.
+        pkey) ALG_PARAMS=('-newkey' 'ec' '-pkeyopt' 'ec_paramgen_curve:prime256v1' '-pkeyopt' 'ec_param_enc:named_curve') ;; ## NIST P-256 is comparable to 128 symmetrical.
+        *) exit 10
+    esac
+    declare -a CERTS=('PK' 'KEK' 'db')
+    for CERT in ${CERTS[@]}; do
+        uuidgen > "uuid/$CERT.uuid"
+        openssl req -new -x509 "${ALG_PARAMS[@]}" -sha256 -nodes -days $TTL -keyout "key/$CERT.key"  -out "crt/$CERT.crt"  -subj "/CN=$CERT/"
+        chmod 0600 "key/$CERT.key"
+        cert-to-efi-sig-list -g "$(cat "uuid/$CERT.uuid")" "crt/$CERT.crt"  "esl/$CERT.esl"
+    done
+    sign-efi-sig-list -k "key/PK.key"  -c "crt/PK.crt"  PK  "esl/PK.esl"  "auth/PK.auth"
+    sign-efi-sig-list -k "key/PK.key"  -c "crt/PK.crt"  KEK "esl/KEK.esl" "auth/KEK.auth"
+    sign-efi-sig-list -k "key/KEK.key" -c "crt/KEK.crt" db  "esl/db.esl"  "auth/db.auth"
+    chmod 0644 "uuid/"* "crt/"* "esl/"* "auth/"*
+    echo 'NOTICE: If paranoid, regenerate these keys from scratch from the real system, using entropy from infnoise.'
+
+    ## Enroll SB keys
+    echo ':: Enrolling SecureBoot keys...'
+    test -d /sys/firmware/efi && echo "UEFI OK" || echo "UEFI NOT OKAY"
+    for CERT in ${CERTS[@]}; do
+        efi-updatevar -f "esl/$CERT.esl" "$CERT"
+        efi-readvar -v "$CERT"
+    done
+    echo "INFO: To update your BIOS's SecureBoot database, you will have to append to the 'DB.esl' file, sign it as a 'DB.auth' file, and run \`efi-updatevar -f $SBDIR/auth/db.auth db\`."
+    cd "$CWD"
+else
+    echo "WARN: SecureBoot not in Setup Mode; may be unable to proceed."
+fi
+
+## Add support for SecureBoot to DKMS
+echo ':: Configuring DKMS for SecureBoot...'
+## Checking module signatures helps protect against the following: evil maid, root hack persistence, poisoned upstream package.
+## #1 is eliminated by not storing the kernel in unencrypted /boot.
+## #2 is, largely, too little too late — they already have root! And to get this kind of protection, I'd have to store the private key off-system, which would kill automation.
+## #3 is *virtually* eliminated by package integrity checks.
+## Accordingly, in this situation, there is no meaningful benefit to enforcing module signatures.
+## But we might as well do so anyway.
+KERNEL_COMMANDLINE="$KERNEL_COMMANDLINE module.sig_enforce=1"
+cat > /usr/local/sbin/dkms-sign-file <<'EOF'
+#!/bin/sh
+set -euo pipefail
+SIGN_FILE=$(ls -1 /usr/lib/linux-kbuild-*/scripts/sign-file 2>/dev/null | sort -V | tail -n 1)
+[ -x "$SIGN_FILE" ] || exit 1
+exec "$SIGN_FILE" "$@"
+EOF; chmod +x /usr/local/sbin/dkms-sign-file
+FWCONF='/etc/dkms/framework.conf'
+idempotent_append 'sign_tool="/usr/local/sbin/dkms-sign-file"' "$FWCONF"
+idempotent_append "private_key=\"$SBDIR/key/db.key\"" "$FWCONF"
+idempotent_append "public_key=\"$SBDIR/crt/db.crt\"" "$FWCONF"
+unset FWCONF
+dkms autoinstall --force
+modinfo zfs | grep -E 'signer|sig_key|sig_hashalgo'
+
+## Make ZBM work with SecureBoot
+echo ':: Configuring ZBM for SecureBoot...'
+cat > /etc/zfsbootmenu/generate-zbm.post.d/98-sign-efi.sh <<EOF
+#!/bin/sh
+set -e
+KEY_FILE=$SBDIR/key/db.key
+CRT_FILE=$SBDIR/crt/db.crt
+EFI_DIR=$ZBM_EFI_DIR
+[ -s "\$KEY_FILE" -a -s "\$CRT_FILE" ] || exit 1
+openssl pkey -in "$KEY_FILE" -check -noout >/dev/null 2>&1 || exit 2
+for EFI_FILE in "\$EFI_DIR"/*.EFI; do
+    [ -s "\$EFI_FILE" ] || continue
+    sbsign --output "\$EFI_FILE.signed" --key "\$KEY_FILE" --cert "\$CRT_FILE" "\$EFI_FILE" &&\\
+    mv -f "\$EFI_FILE.signed" "\$EFI_FILE"
+done
+EOF; chmod +x /etc/zfsbootmenu/generate-zbm.post.d/98-sign-efi.sh
+generate-zbm
+sbverify --list /boot/esp/EFI/ZBM/*.EFI
+sbverify --list /boot/esp/EFI/BOOT/BOOTX64.EFI
 
 ##########################################################################################
 ## PACKAGES
