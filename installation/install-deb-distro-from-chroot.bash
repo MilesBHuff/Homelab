@@ -794,7 +794,7 @@ echo "$KERNEL_COMMANDLINE" > "$KERNEL_COMMANDLINE_DIR/commandline.txt"
 echo '#!/bin/sh' > "$KERNEL_COMMANDLINE_DIR/set-commandline"
 echo 'BOOTFS=$(zpool get -Ho value bootfs '"$ENV_POOL_NAME_OS"')' > "$KERNEL_COMMANDLINE_DIR/set-commandline"
 cat >> "$KERNEL_COMMANDLINE_DIR/set-commandline" <<'EOF'
-COMMANDLINE="$(cat /etc/zfsbootmenu/commandline/commandline.txt | xargs | tr ' ' '\n' | sort -V | uniq | tr '\n' ' ' && echo)"
+COMMANDLINE="$(awk '{for(i=1;i<=NF;i++){t=$i;if(index(t,"=")){split(t,a,"=");m[a[1]]=t}else m[t]=t}}END{for(k in m)printf "%s ",m[k]}' /etc/zfsbootmenu/commandline/commandline.txt)" ## AI code that deduplicates like keys, keeping the rightmost instances.
 zfs set org.zfsbootmenu:commandline="$COMMANDLINE" "$BOOTFS"
 zfs get org.zfsbootmenu:commandline "$BOOTFS"
 EOF
