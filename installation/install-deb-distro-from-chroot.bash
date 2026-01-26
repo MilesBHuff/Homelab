@@ -24,6 +24,14 @@ function idempotent_append {
     [[ ! -f "$2" ]] && touch "$2"
     grep -Fqx -- "$1" "$2" || printf '%s\n' "$1" >> "$2"
 }
+function mkdir_chmod {
+    mkdir -p "$1"
+    chmod "$2" "$1"
+}
+function touch_chmod {
+    touch "$1"
+    chmod "$2" "$1"
+}
 
 ################################################################################
 ## ENVIRONMENT
@@ -396,15 +404,13 @@ awk "$AWK_SCRIPT" /proc/self/mounts | while read -r MOUNT_PATH MOUNT_OPTS; do
     fi
 done
 exit 0
-EOF
-chmod 0755 "$SCRIPT"
+EOF; chmod 0755 "$SCRIPT"
 
 SCRIPT=/usr/local/sbin/mount
 cat > "$SCRIPT" <<EOF
 #!/bin/sh
 exec /usr/bin/mount -o noatime,lazytime "$@"
-EOF
-chmod 0755 "$SCRIPT"
+EOF; chmod 0755 "$SCRIPT"
 ## Note to code reviewers: `-o` can be passed multiple times, and later values override prior ones.
 
 SCRIPT=/usr/local/sbin/zfs
@@ -413,8 +419,7 @@ cat > "$SCRIPT" <<EOF
 [ "$1" != mount ] && exec /usr/sbin/zfs "$@"
 shift
 exec /usr/sbin/zfs mount -o lazytime "$@"
-EOF
-chmod 0755 "$SCRIPT"
+EOF; chmod 0755 "$SCRIPT"
 
 unset BASENAME SCRIPT SERVICE
 
@@ -481,8 +486,7 @@ SRC="ZBM/$SRC"
 DEST='BOOT/BOOTX64.EFI'
 cp -fa "$SRC" "$DEST.new"
 mv -f "$DEST.new" "$DEST"
-EOF
-chmod +x /etc/zfsbootmenu/generate-zbm.post.d/99-portablize.sh
+EOF; chmod +x /etc/zfsbootmenu/generate-zbm.post.d/99-portablize.sh
 read -p "Don't let kexec-tools handle reboots by default; it is an unsupported scenario and results in a series of bugs. If you ever want to kexec into a small point-release kernel, explicitly request it. " FOO; unset FOO
 apt install -y bsdextrautils curl dracut-core efibootmgr fzf kexec-tools libsort-versions-perl libboolean-perl libyaml-pp-perl mbuffer systemd-boot-efi
 # apt-mark auto bsdextrautils dracut-core fzf libboolean-perl libsort-versions-perl libyaml-pp-perl mbuffer
@@ -499,11 +503,10 @@ case $DISTRO in
     2) apt install -y -t "$UBUNTU_VERSION-backports" zfs-initramfs ;;
 esac
 KEYDIR=/etc/zfs/keys
-chmod 700 "$KEYDIR"
+mkdir_chmod "$KEYDIR" 700
 KEYFILE="$KEYDIR/$ENV_POOL_NAME_OS.key"
 if [[ ! -f "$KEYFILE" ]]; then
-    touch "$KEYFILE"
-    chmod 600 "$KEYFILE"
+    touch_chmod "$KEYFILE" 600
     read -p "A file is about to open; enter your ZFS encryption password into it. This is necessary to prevent double-prompting during boot. Press 'Enter' to continue. " FOO; unset FOO
     nano "$KEYFILE"
 fi
