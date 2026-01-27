@@ -31,7 +31,7 @@ chmod 644 "$FILE"
 ## QUEUE DEPTH ##
 #################
 ## The ZFS settings here affect all devices, including NVMes; but I'm using my NVMes for L2ARC, which ZFS heavily rate-limits for longevity, so it shouldn't matter that we're limiting them to a SATA queue depth.
-## The defaults set tight per-pipe minima/maxima; I accomplish the same goals with greater flexibility and accuracy by setting an overall limit, lower per-pipe minima, and larger per-pipe maxima.
+## The defaults set tight per-pipe minima/maxima; I manage to accomplish the same ends with greater flexibility for lopsided loads by setting an overall limit, lower per-pipe minima, and larger per-pipe maxima.
 ## To avoid bad settings, I have ensured that symmetrical load totals match those of the defaults. In order to do this, it was necessary to first understand ZFS's scheduler's algorithm.
 ## Algorithm: (All loops go in order from sync_read to sync_write to async_read to async_write to scrub.) First, loop through and assign one command to each category until all minima are filled. Then, repeat until all maxima are filled or the total queue limit is hit.
 
@@ -47,8 +47,8 @@ echo "options zfs       zfs_vdev_scrub_min_active=1"  >> "$FILE" #DEFAULT:    1
 ##                                               =14             #DEFAULT:  =24
 
 ## Max queue depths per category
-## The highest sensible value for any of these is probably the CPU core count (in my case, 24 after SMT), or the max quese depth (32), whichever is lower, because any higher would put multiple of the same kind of I/O thread on the same core, which is counterproductive, or because there would be more items to queue than the queue is large.
-## However, 24 is so high as to be meaningless in most contexts (and should be viewed as being effectively uncapped). For the first three categories, that's actually okay. But for the last two categories, having a high maxima results in them being given far too much weight. Async writes and scrubs have zero impact on applications, so they should not be allowed more resources than absolutely necessary. Their defaults are reasonable and battle-hardened.
+## The highest sensible value for any of these is probably the CPU core count (in my case, 24 after SMT), or the max queue depth (32), whichever is lower, because any higher would put multiple of the same kind of I/O thread on the same core, which is counterproductive, or because there would be more items to queue than the queue is large.
+## However, 24 is so high as to be meaningless in most contexts (and should be viewed as being effectively uncapped). For the first three categories, that's actually okay; but for the last two categories, having high maxima results in them being given far too much weight. Async writes and scrubs have zero impact on applications, so they should not be allowed more resources than absolutely necessary. Their defaults are reasonable and battle-hardened.
 echo "options zfs   zfs_vdev_sync_read_max_active=24" >> "$FILE" #DEFAULT:   10
 echo "options zfs  zfs_vdev_sync_write_max_active=24" >> "$FILE" #DEFAULT:   10
 echo "options zfs  zfs_vdev_async_read_max_active=24" >> "$FILE" #DEFAULT:   10
@@ -57,7 +57,7 @@ echo "options zfs       zfs_vdev_scrub_max_active=2"  >> "$FILE" #DEFAULT:    2
 ##                                               =77             #DEFAULT:  =35
 ## Yes, the total is supposed to be higher than (or equal to) the hard max (32 in my case).
 
-#RESULT: Real values under symmetrical load: 32,10,10,7,3,2 (matches default of 32;10,10,7,3,2)
+#RESULT: values under symmetrical load: 32,10,10,7,3,2 (matches default of 32;10,10,7,3,2)
 
 function apply-setting {
     [[ ! -f "$2" ]] && return 1
