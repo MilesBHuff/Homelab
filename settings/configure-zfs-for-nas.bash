@@ -28,7 +28,7 @@ if [[ \
     -z "$ENV_SPEED_L2ARC" ||\
     -z "$ENV_SPEED_MBPS_MAX_SLOWEST_HDD" ||\
     -z "$ENV_THRESHOLD_SMALL_FILE"
-]]; then #TODO: Add missing used variables above!
+]]; then
     echo "ERROR: Missing variables in '$ENV_FILE'!" >&2
     exit 3
 fi
@@ -105,9 +105,10 @@ function apply-setting {
 #TODO: Make persistent via udev, so that it will automatically re-apply whenever devices are inserted/removed.
 #FIXME: Linux assumes rotational by default, which results in flashdrives incorrectly being marked as rotational.
 for DEV in /sys/block/sd* /sys/block/nvme*n*; do
+    DEV_DEV="/dev/$(basename "$DEV")"
 
     ## Make sure flash drives are not marked as rotational
-    if udevadm info --query=property --name="$DEV" | grep 'FLASH'; then #WARN: This check doesn't identify every flashdrive, but also it doesn't have a high rate of false-positives, and that's what's most-important.
+    if udevadm info --query=property --name="$DEV_DEV" | grep 'FLASH'; then #WARN: This assumes that everything claiming to be "FLASH" is actually flash, which is probably correct almost always. It does not get things that are flash but do not call themselves "FLASH". Overall, this should have low-to-no false-positives, which is good. Some false-negatives falling through the cracks is fine.
         SETTING_NEW=0
         SETTING_PATH="$DEV/queue/rotational"
         apply-setting "$SETTING_NEW" "$SETTING_PATH"
@@ -144,7 +145,8 @@ for DEV in /sys/block/sd* /sys/block/nvme*n*; do
     declare -i IS_PART_OF_POOL=0
     declare -a POOL_NAMES=("$ENV_POOL_NAME_DAS" "$ENV_POOL_NAME_NAS" "$ENV_POOL_NAME_OS")
     for NAME in "${POOL_NAMES[@]}"; do
-        for DEVICE in $(zpool status -P "$NAME" | sed -E 's/^\/dev\/(.+)p?\d*?$/\1/'); do
+        DEVICES=$(zpool status -P "$NAME" | sed -E 's/^\/dev\/(.+)p?\d*?$/\1/') #FIXME: Only works for things inside the root of `/dev`, not for things in subdirectories.
+        for DEVICE in $DEVICES; do
             DISK=$(readlink -f "$DEVICE" | sed 's|/dev/||')
             if [[ "/sys/block/$DISK" == "$DEV" ]]; then
                 IS_PART_OF_POOL=1
@@ -176,12 +178,12 @@ done
 case "$ENV_NVME_QUEUE_REGIME" in
     'NVMe')
         echo 'NOTICE: You should run the following properties on your NVMe datasets: direct=always, logbias=throughput'
-        ## Skip the ZIL for everything
-        echo 'options zfs zfs_immediate_write_sz=0' >> "$FILE"
+        ## Skip the ZIL for everything.
+        echo 'options zfs zfs_immediate_write_sz=512' >> "$FILE"
         ;;
     *)
-        ## Avoid contention between the SVDEV and the SLOG, which share a device and a sync domain.
-        echo "options zfs zfs_immediate_write_sz=$((${ENV_THRESHOLD_SMALL_FILE%K} * 1024))" >> "$FILE"
+        ## Avoid contention between the SVDEV and the ZIL. Ignored when there is a SLOG.
+        echo "options zfs zfs_immediate_write_sz=$((${ENV_THRESHOLD_SMALL_FILE%K} * 2048))" >> "$FILE"
         ;;
 esac
 
