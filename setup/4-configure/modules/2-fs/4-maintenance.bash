@@ -54,7 +54,7 @@ cat > '/etc/smartd.conf' << 'EOF' && smartd -q onecheck && systemctl enable --no
 ##
 ## Note that I am not scheduling any short/long tests here: this is because I want schedules to be per-drive, to avoid contention.
 ##
-DEVICESCAN -ao on -S on -W 0,43,50 -m root
+DEVICESCAN -a -o on -S on -W 0,43,50 -m root
 EOF
 ## Short tests (not enabled by default)
 cat > '/etc/systemd/system/smart-short@.service' << 'EOF'
